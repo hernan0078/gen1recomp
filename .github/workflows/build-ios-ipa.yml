@@ -2,7 +2,7 @@ name: Build iOS IPA (VoxelMod)
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [ main, dev, "feature/*" ]
   workflow_dispatch:
 
 permissions:
