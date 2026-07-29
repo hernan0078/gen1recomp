@@ -168,15 +168,16 @@ pack_game_love() {
   # tools/save-editor, which the launcher's Edit button opens in-process.
   (cd "$ROOT" && zip -q -9 -r "$LOVE_FILE" \
     main.lua conf.lua src data assets mods tools/save-editor \
-    tools/rom_manifest.json tools/rom_manifest_blue.json \
     -x '*.DS_Store' -x '*/.git/*' -x '*/.DS_Store' \
     -x 'data/generated/*' -x 'assets/generated/*')
-  if unzip -Z1 "$LOVE_FILE" \
-      | grep -Eq '^(data|assets)/generated/[^/]+|^(data|assets)/generated/.+/'; then
+  local contents
+  contents="$(unzip -Z1 "$LOVE_FILE")"
+  if echo "$contents" | grep -Eq '^(data|assets)/generated/[^/]+|^(data|assets)/generated/.+/'; then
     fail "game.love unexpectedly contains generated ROM data"
   fi
-  unzip -Z1 "$LOVE_FILE" | grep -qx 'tools/save-editor/App.lua' \
-    || fail "game.love is missing the save editor (Edit on a save row would crash)"
+  if ! echo "$contents" | grep -q 'tools/save-editor/App.lua'; then
+    fail "game.love is missing the save editor (Edit on a save row would crash)"
+  fi
   say "game.love: $(du -h "$LOVE_FILE" | cut -f1) -> $LOVE_FILE"
 }
 
