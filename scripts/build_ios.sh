@@ -313,9 +313,12 @@ run_xcodebuild() {
     warn "device build: configure signing in Xcode or set DEVELOPMENT_TEAM / CODE_SIGN_IDENTITY"
     if [ -n "${DEVELOPMENT_TEAM:-}" ]; then
       args+=(DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM")
-    fi
-    if [ -n "${CODE_SIGN_IDENTITY:-}" ]; then
-      args+=(CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY")
+      if [ -n "${CODE_SIGN_IDENTITY:-}" ]; then
+        args+=(CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY")
+      fi
+    else
+      warn "No DEVELOPMENT_TEAM set; building unsigned device payload for sideloading"
+      args+=(CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=)
     fi
   fi
 
