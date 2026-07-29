@@ -1,0 +1,39 @@
+name: Build iOS IPA (VoxelMod)
+
+on:
+  push:
+    branches: [ main, dev ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios:
+    name: Build iOS IPA Package
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup macOS Dependencies
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer || true
+          xcodebuild -version
+
+      - name: Fetch LÖVE iOS Engine & Package Resources
+        run: |
+          chmod +x scripts/build_ios.sh
+          ./scripts/build_ios.sh --fetch --package-only
+
+      - name: Compile iOS Target & Build IPA
+        run: |
+          ./scripts/build_ios.sh --device --release
+
+      - name: Upload .IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gen1Recomp-VoxelMod-iOS.ipa
+          path: dist/ios/Release-iphoneos/Gen1Recomp.ipa
+          if-no-files-found: error

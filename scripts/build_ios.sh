@@ -167,7 +167,7 @@ pack_game_love() {
   # Same payload as scripts/build.sh / build_android.sh: game sources plus
   # tools/save-editor, which the launcher's Edit button opens in-process.
   (cd "$ROOT" && zip -q -9 -r "$LOVE_FILE" \
-    main.lua conf.lua src data assets tools/save-editor \
+    main.lua conf.lua src data assets mods tools/save-editor \
     tools/rom_manifest.json tools/rom_manifest_blue.json \
     -x '*.DS_Store' -x '*/.git/*' -x '*/.DS_Store' \
     -x 'data/generated/*' -x 'assets/generated/*')
@@ -366,6 +366,19 @@ run_xcodebuild() {
   mkdir -p "$dist_dir"
   cp -R "$app" "$dist_dir/"
   say "copied to $dist_dir/$(basename "$app")"
+
+  # Package into .ipa format (Payload/App.app)
+  local ipa_path="$dist_dir/Gen1Recomp.ipa"
+  say "creating .ipa package at $ipa_path"
+  (
+    cd "$dist_dir"
+    rm -rf Payload Gen1Recomp.ipa
+    mkdir Payload
+    cp -R "$(basename "$app")" Payload/
+    zip -q -r Gen1Recomp.ipa Payload
+    rm -rf Payload
+  )
+  say "iOS .ipa: $ipa_path"
 
   say "iOS app: $app"
   say "bundle id: $BUNDLE_ID  display: $DISPLAY_NAME"
