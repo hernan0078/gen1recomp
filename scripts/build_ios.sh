@@ -93,6 +93,11 @@ PACKAGE_ONLY=false
 INSTALL=false
 VERSION=""
 ALLOW_UNSTAGED=false
+# The bundled 3D renderer is third-party and carries no licence, so a build
+# meant for redistribution has to be able to leave it out.  --no-mods packs
+# the engine alone; the game plays in classic 2D and the mod manager simply
+# lists nothing built in.
+WITH_MOD=true
 
 say()  { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mwarn:\033[0m %s\n' "$*" >&2; }
@@ -106,13 +111,14 @@ while [ $# -gt 0 ]; do
     --release) RELEASE=true ;;
     --package-only) PACKAGE_ONLY=true ;;
     --allow-unstaged) ALLOW_UNSTAGED=true ;;
+    --no-mods) WITH_MOD=false ;;
     --install) INSTALL=true ;;
     --version) VERSION="$2"; shift ;;
     -h|--help)
       sed -n '2,24p' "$0"
       exit 0
       ;;
-    *) fail "unknown argument: $1 (try --fetch, --device, --unsigned, --release, --version, --install, --allow-unstaged, or --package-only)" ;;
+    *) fail "unknown argument: $1 (try --fetch, --device, --unsigned, --release, --version, --install, --allow-unstaged, --no-mods, or --package-only)" ;;
   esac
   shift
 done
@@ -286,7 +292,9 @@ pack_game_love() {
   say "packing game.love for love-ios resources"
   mkdir -p "$RESOURCES_DIR"
   rm -f "$LOVE_FILE"
-  local pack_tmp staged_love
+  local pack_tmp staged_love mod_path
+  mod_path="mods/DramaticShapeVoxelMod"
+  [ "$WITH_MOD" = true ] || mod_path=""
   pack_tmp="$(mktemp -d /private/tmp/voxeltrail-love.XXXXXX)"
   staged_love="$pack_tmp/game.love"
   # Same payload as scripts/build.sh / build_android.sh: game sources plus
@@ -305,7 +313,7 @@ pack_game_love() {
     # because nothing anywhere says so. Refuse instead.
     local dirty
     dirty="$(git -C "$ROOT" diff --name-only -- \
-      main.lua conf.lua src data assets mods/DramaticShapeVoxelMod \
+      main.lua conf.lua src data assets $mod_path \
       tools/save-editor tools/rom_manifest.json tools/rom_manifest_blue.json \
       tools/rom_manifest_yellow.json)"
     if [ -n "$dirty" ] && [ "$ALLOW_UNSTAGED" != true ]; then
@@ -316,19 +324,19 @@ $dirty"
     fi
     local archive_tree="HEAD"
     if ! git -C "$ROOT" diff --cached --quiet -- \
-        main.lua conf.lua src data assets mods/DramaticShapeVoxelMod \
+        main.lua conf.lua src data assets $mod_path \
         tools/save-editor tools/rom_manifest.json tools/rom_manifest_blue.json \
         tools/rom_manifest_yellow.json; then
       archive_tree="$(git -C "$ROOT" write-tree)"
     fi
     git -C "$ROOT" archive --format=zip --output="$staged_love" \
       "$archive_tree" main.lua conf.lua src data assets \
-      mods/DramaticShapeVoxelMod tools/save-editor \
+      $mod_path tools/save-editor \
       tools/rom_manifest.json tools/rom_manifest_blue.json \
       tools/rom_manifest_yellow.json
   else
     (cd "$ROOT" && zip -q -9 -r "$staged_love" \
-      main.lua conf.lua src data assets mods/DramaticShapeVoxelMod tools/save-editor \
+      main.lua conf.lua src data assets $mod_path tools/save-editor \
       tools/rom_manifest.json tools/rom_manifest_blue.json \
       tools/rom_manifest_yellow.json \
       -x '*.DS_Store' -x '*/.git/*' -x '*/.DS_Store' \
@@ -345,9 +353,17 @@ $dirty"
   fi
   unzip -Z1 "$LOVE_FILE" | grep -x 'tools/save-editor/App.lua' >/dev/null \
     || fail "game.love is missing the save editor (Edit on a save row would crash)"
-  unzip -Z1 "$LOVE_FILE" \
-    | grep -x 'mods/DramaticShapeVoxelMod/manifest.json' >/dev/null \
-    || fail "game.love is missing DramaticShapeVoxelMod"
+  if [ "$WITH_MOD" = true ]; then
+    unzip -Z1 "$LOVE_FILE" \
+      | grep -x 'mods/DramaticShapeVoxelMod/manifest.json' >/dev/null \
+      || fail "game.love is missing DramaticShapeVoxelMod"
+  else
+    # The point of --no-mods is that nothing third-party ships.  Assert it,
+    # rather than trusting that dropping the pathspec was enough.
+    if unzip -Z1 "$LOVE_FILE" | grep '^mods/' >/dev/null; then
+      fail "--no-mods build still contains mod files"
+    fi
+  fi
   # Every lib/ module the working tree has, not just the manifest.
   #
   # The payload comes out of `git archive`, so a mod source file that is
@@ -364,7 +380,7 @@ $dirty"
       unzip -Z1 "$LOVE_FILE" | grep -x "$rel" >/dev/null || echo "$rel"
     done
   )"
-  if [ -n "$missing" ]; then
+  if [ "$WITH_MOD" = true ] && [ -n "$missing" ]; then
     fail "game.love is missing mod sources (untracked in git?):
 $missing"
   fi

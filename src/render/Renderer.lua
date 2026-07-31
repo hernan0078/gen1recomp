@@ -535,7 +535,17 @@ function Renderer:endFrame(zones, worldZones)
   -- pad position from the layout editor moves the screen with it. Landscape,
   -- desktop, and a hidden pad (a controller is connected) all fall through to
   -- plain centring.
-  local lift = Renderer.portraitLift(ph, dpiY)
+  -- ...but only when there is letterboxing to reclaim. A render pipeline that
+  -- supplies a full-window world (the 3D mod) leaves no black bars, so there
+  -- is nothing to win by raising the frame -- and plenty to lose: the mons
+  -- are placed in world space, not against the GB frame, so lifting the frame
+  -- slides the battle menu up over them.
+  local lift = 0
+  if not self.worldOverride then lift = Renderer.portraitLift(ph, dpiY) end
+  -- Published so callers land on the same letterbox instead of recomputing
+  -- it: the mod's battle rig reads this rather than deciding for itself, and
+  -- a stale read is merely one frame old, never a different answer.
+  Renderer.appliedLift = lift
   -- Snap the letterbox origin to a framebuffer pixel, then convert to units.
   local ox = math.floor((pw - uiw * Sp) / 2) / dpiX
   local oy = math.floor((ph - uih * Sp) / 2 - lift) / dpiY
