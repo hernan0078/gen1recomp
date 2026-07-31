@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Pokemon Red</string>
+	<string>VoxelTrail</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -44,11 +44,28 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<false/>
+	<true/>
 	<key>UIFileSharingEnabled</key>
-	<false/>
+	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>Launch Screen</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>VoxelTrail Default</string>
+					<key>UISceneDelegateClassName</key>
+					<string>VoxelTrailSceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>opengles-2</string>
@@ -100,16 +117,7 @@
 			</dict>
 		</dict>
 	</array>
-	<!-- gen1recomp iOS: expose the app's Documents folder in the Files app /
-	     Finder so ROMs, mod .zips, and .sav files can be dropped in without
-	     the picker; GRBootstrap sweeps them into the LÖVE save dir. -->
-	<key>UIFileSharingEnabled</key>
-	<true/>
-	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<true/>
-	<!-- gen1recomp iOS: Pokéwalker mod reads step counts (opt-in, in the
-	     in-game mod manager) and converts them to Pokémon EXP. -->
-	<key>NSHealthShareUsageDescription</key>
-	<string>The Pokéwalker mod reads your step count to give your Pokémon party experience points for real-world walking.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

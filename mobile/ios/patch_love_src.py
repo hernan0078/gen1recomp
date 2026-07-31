@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
-"""Applies gen1recomp's iOS native-bridge patches to the fetched LÖVE 11.5
+"""Applies VoxelTrail's iOS native-bridge patches to the fetched LÖVE 11.5
 source tree (mobile/ios/love-src/). Idempotent AND re-appliable: the first
 run stashes a pristine `.orig` copy of every file it rewrites, and later
 runs always start over from that copy — so editing the patch content here
 just works on the next build, no manual restore needed.
 
 What it does:
-  1. Copies mobile/ios/native/ (GRPickerBridge.swift, GRHealthBridge.swift,
-     GRBootstrap.m) and the HealthKit entitlements into the LÖVE tree.
+  1. Copies the document-picker bridge and bootstrap into the LÖVE tree.
   2. Patches liblove's wrap_System.cpp to expose love.system.pickFile,
-     love.system.createFile, and love.system.syncHealthSteps on iOS (each
+     love.system.createFile on iOS (each
      calls a GR*Bridge Swift class through the Objective-C runtime, so
      liblove never links against Swift directly).
   3. Patches love.xcodeproj so the love-ios app target compiles the native
-     files (Swift 5, iOS 14 deployment for UTType/forExporting APIs).
+     files (Swift 5, iOS 16 deployment).
 """
 
 import re
@@ -27,11 +26,32 @@ NATIVE_SRC = IOS_DIR / "native"
 NATIVE_DST = LOVE_SRC / "platform" / "xcode" / "ios" / "native"
 WRAP_SYSTEM = LOVE_SRC / "src" / "modules" / "system" / "wrap_System.cpp"
 PBXPROJ = LOVE_SRC / "platform" / "xcode" / "love.xcodeproj" / "project.pbxproj"
-ENTITLEMENTS_SRC = IOS_DIR / "overlays" / "love-ios.entitlements"
+# Both Xcode projects in the LÖVE tree; liblove is a separate one that
+# love.xcodeproj depends on, and it carries its own deployment target.
+ALL_PBXPROJ = (
+    PBXPROJ,
+    LOVE_SRC / "platform" / "xcode" / "liblove.xcodeproj" / "project.pbxproj",
+)
+# LÖVE 11.5 ships targeting iOS 8.0. Xcode 26/27 refuses to open or build that:
+#
+#   The iOS deployment target 'IPHONEOS_DEPLOYMENT_TARGET' is set to 8.0, but
+#   the range of supported deployment target versions is 15.0 to 27.0.x
+#
+# Command-line builds get away with it because scripts/build_ios.sh passes
+# IPHONEOS_DEPLOYMENT_TARGET on the xcodebuild invocation, which overrides every
+# target -- but the IDE reads the project files, so opening the project (to set
+# a signing team, or to register a connected device) hits the error on targets
+# the script never rewrote. Normalise the stale value in the files themselves.
+STALE_DEPLOYMENT_TARGET = "8.0"
+# Kept in step with DEPLOYMENT_TARGET in scripts/build_ios.sh.
+DEPLOYMENT_TARGET = "16.0"
+NATIVE_FILES = (
+    "GRPickerBridge.swift",
+    "GRBootstrap.m",
+    "VoxelTrailSceneLifecycle.m",
+)
 
-NATIVE_FILES = ("GRPickerBridge.swift", "GRHealthBridge.swift", "GRBootstrap.m")
-
-MARKER = "gen1recomp iOS picker bridge"
+MARKER = "VoxelTrail iOS picker bridge"
 
 # Headers must land outside `namespace love { namespace system {`.
 WRAP_INCLUDES = """
@@ -45,9 +65,9 @@ WRAP_INCLUDES = """
 
 WRAP_FUNCS = """
 // --- %s -------------------------------------------------
-// love.system.pickFile / createFile / syncHealthSteps for iOS. pickFile and
+// love.system.pickFile / createFile for iOS. pickFile and
 // createFile mirror the love-android extension this project's importer
-// already targets; syncHealthSteps feeds the Pokéwalker mod. Implemented in
+// already targets. Implemented in
 // Swift (GR*Bridge classes, love-ios app target); reached via the ObjC
 // runtime so liblove itself needs no Swift interop.
 #ifdef LOVE_IOS
@@ -85,10 +105,6 @@ int w_createFile(lua_State *L)
 	return gr_callBridge(L, "GRPickerBridge", "presentExportWithName:saveDir:", name);
 }
 
-int w_syncHealthSteps(lua_State *L)
-{
-	return gr_callBridge(L, "GRHealthBridge", "syncStepsWithCommand:saveDir:", "sync");
-}
 #endif // LOVE_IOS
 // ---------------------------------------------------------------------------
 
@@ -97,7 +113,6 @@ int w_syncHealthSteps(lua_State *L)
 WRAP_REGISTRATION = """#ifdef LOVE_IOS
 	{ "pickFile", w_pickFile },
 	{ "createFile", w_createFile },
-	{ "syncHealthSteps", w_syncHealthSteps },
 #endif
 """
 
@@ -105,10 +120,10 @@ WRAP_REGISTRATION = """#ifdef LOVE_IOS
 # upstream project (grep-verified against love-11.5's pbxproj).
 ID_FILE_PICKER = "6E1AC0DE0001000000000001"
 ID_FILE_OBJC = "6E1AC0DE0001000000000002"
-ID_FILE_HEALTH = "6E1AC0DE0001000000000003"
 ID_BUILD_PICKER = "6E1AC0DE0002000000000001"
 ID_BUILD_OBJC = "6E1AC0DE0002000000000002"
-ID_BUILD_HEALTH = "6E1AC0DE0002000000000003"
+ID_FILE_SCENE = "6E1AC0DE0001000000000003"
+ID_BUILD_SCENE = "6E1AC0DE0002000000000003"
 SOURCES_PHASE_ID = "FA0B7F021A95AAF3000E1D17"  # love-ios Sources phase
 IOS_APP_CONFIG_IDS = (
     "FA0B7F261A95AAF4000E1D17",  # Debug
@@ -118,8 +133,9 @@ IOS_APP_CONFIG_IDS = (
 
 PBX_SOURCES = (
     ("GRPickerBridge.swift", ID_FILE_PICKER, ID_BUILD_PICKER, "sourcecode.swift"),
-    ("GRHealthBridge.swift", ID_FILE_HEALTH, ID_BUILD_HEALTH, "sourcecode.swift"),
     ("GRBootstrap.m", ID_FILE_OBJC, ID_BUILD_OBJC, "sourcecode.c.objc"),
+    ("VoxelTrailSceneLifecycle.m", ID_FILE_SCENE, ID_BUILD_SCENE,
+     "sourcecode.c.objc"),
 )
 
 
@@ -154,9 +170,6 @@ def copy_native_files():
         if not src.is_file():
             fail(f"missing {src}")
         shutil.copy2(src, NATIVE_DST / name)
-    if not ENTITLEMENTS_SRC.is_file():
-        fail(f"missing {ENTITLEMENTS_SRC}")
-    shutil.copy2(ENTITLEMENTS_SRC, NATIVE_DST / "love-ios.entitlements")
     print(f"patch_love_src: native files -> {NATIVE_DST}")
 
 
@@ -175,8 +188,7 @@ def patch_wrap_system():
         fail(f"registration anchor not found in {WRAP_SYSTEM}")
     text = text.replace(reg_anchor, reg_anchor + WRAP_REGISTRATION, 1)
     WRAP_SYSTEM.write_text(text)
-    print("patch_love_src: wrap_System.cpp patched "
-          "(pickFile/createFile/syncHealthSteps)")
+    print("patch_love_src: wrap_System.cpp patched (pickFile/createFile)")
 
 
 def patch_pbxproj():
@@ -217,9 +229,7 @@ def patch_pbxproj():
     )
     text = text[: m.end()] + insertion + text[m.end():]
 
-    # Swift + modern deployment target + HealthKit entitlements on the
-    # love-ios app target only (UTType and forExporting need iOS 14;
-    # liblove stays as upstream).
+    # Swift + the VoxelTrail deployment target on the love-ios app target.
     for config_id in IOS_APP_CONFIG_IDS:
         cfg_re = re.compile(
             re.escape(config_id) + r" /\* \w+ \*/ = \{.*?buildSettings = \{\n",
@@ -229,13 +239,43 @@ def patch_pbxproj():
             fail(f"build configuration {config_id} not found")
         settings = (
             "\t\t\t\tSWIFT_VERSION = 5.0;\n"
-            "\t\t\t\tIPHONEOS_DEPLOYMENT_TARGET = 14.0;\n"
-            '\t\t\t\tCODE_SIGN_ENTITLEMENTS = "ios/native/love-ios.entitlements";\n'
+            f"\t\t\t\tIPHONEOS_DEPLOYMENT_TARGET = {DEPLOYMENT_TARGET};\n"
         )
         text = text[: m.end()] + settings + text[m.end():]
 
     PBXPROJ.write_text(text)
-    print("patch_love_src: love.xcodeproj patched (native sources + Swift + entitlements)")
+    print("patch_love_src: love.xcodeproj patched (picker bridge + Swift)")
+
+
+def patch_deployment_targets():
+    """Raise LOVE's shipped iOS 8.0 targets to one Xcode 26/27 accepts.
+
+    LOVE 11.5 ships targeting iOS 8.0 and Xcode 26/27 refuses it outright:
+
+      The iOS deployment target 'IPHONEOS_DEPLOYMENT_TARGET' is set to 8.0,
+      but the range of supported deployment target versions is 15.0 to 27.0.x
+
+    Command-line builds never saw it, because scripts/build_ios.sh passes
+    IPHONEOS_DEPLOYMENT_TARGET to xcodebuild and that overrides every target.
+    The IDE reads the project files instead, so opening the project -- to set a
+    signing team, or to get a connected device registered -- hits the error on
+    the targets nothing had rewritten. Six configurations across two projects:
+    liblove.xcodeproj is a separate project that love.xcodeproj depends on, and
+    it was never touched at all.
+    """
+    stale = f"IPHONEOS_DEPLOYMENT_TARGET = {STALE_DEPLOYMENT_TARGET};"
+    fresh = f"IPHONEOS_DEPLOYMENT_TARGET = {DEPLOYMENT_TARGET};"
+    for path in ALL_PBXPROJ:
+        if not path.is_file():
+            continue          # partial tree; --fetch has not run yet
+        text = path.read_text()
+        if stale not in text:
+            continue
+        count = text.count(stale)
+        path.write_text(text.replace(stale, fresh))
+        print(f"patch_love_src: {path.parent.name} deployment target "
+              f"{STALE_DEPLOYMENT_TARGET} -> {DEPLOYMENT_TARGET} "
+              f"({count} configuration(s))")
 
 
 def main():
@@ -244,6 +284,7 @@ def main():
     copy_native_files()
     patch_wrap_system()
     patch_pbxproj()
+    patch_deployment_targets()
 
 
 if __name__ == "__main__":

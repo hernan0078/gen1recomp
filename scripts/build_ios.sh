@@ -1,28 +1,33 @@
 #!/usr/bin/env bash
-# Packages the LÖVE2D Pokémon Red port into an iOS app via LÖVE 11.5's
+# Packages VoxelTrail into an iOS app via LÖVE 11.5's
 # official iOS Xcode project (love-11.5-ios-source.zip).
 #
-# Usage: scripts/build_ios.sh [--fetch] [--device] [--release] [--install]
-#                             [--version X.Y.Z] [--package-only]
+# Usage: scripts/build_ios.sh [--fetch] [--device] [--unsigned] [--release]
+#                             [--install] [--version X.Y.Z] [--package-only]
 #
 #   (default)         Simulator Debug (ad-hoc signed)
 #   --device          iphoneos SDK; signing team auto-detected from the
 #                     keychain when DEVELOPMENT_TEAM is not set
+#   --unsigned        with --device, disable signing and emit an IPA for
+#                     AltStore/SideStore/TrollStore or another signer
 #   --install         after a --device build, install the app onto the
 #                     first connected iPhone/iPad (unlock it first)
 #   --release         Release configuration
 #   --version X.Y.Z   stamp MARKETING_VERSION / CURRENT_PROJECT_VERSION
 #   --fetch           Download love-11.5-ios-source.zip into mobile/ios/love-src/
 #   --package-only    Zip game.love + apply plist overlay; skip xcodebuild
+#   --allow-unstaged  Package the git INDEX even though tracked files have
+#                     unstaged edits (default is to refuse: the payload
+#                     comes from the index, so those edits would be lost)
 #
 # Prerequisites:
 #   - macOS + Xcode (xcodebuild)
 #   - mobile/ios/love-src/ (see --fetch / mobile/ios/README.md)
 #   - prebuilt iOS libraries under love-src/platform/xcode/ios/libraries/
 #
-# Output: dist/ios/<Config>-<sdk>/gen1recomp.app (convenience copy)
-#         dist/ios/gen1recomp.ipa                 (device builds only)
-#         mobile/ios/build/Build/Products/<Config>-<sdk>/gen1recomp.app
+# Output: dist/ios/<Config>-<sdk>/VoxelTrail.app (convenience copy)
+#         dist/ios/VoxelTrail.ipa                 (device builds only)
+#         mobile/ios/build/Build/Products/<Config>-<sdk>/VoxelTrail.app
 
 set -euo pipefail
 
@@ -30,7 +35,26 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IOS_DIR="$ROOT/mobile/ios"
 LOVE_SRC="$IOS_DIR/love-src"
 CACHE="$IOS_DIR/cache"
-BUILD_DIR="$IOS_DIR/build"
+# Xcode's DerivedData. Kept OUT of iCloud Drive when the checkout is inside
+# it: iCloud stamps every file it manages with com.apple.FinderInfo and
+# com.apple.fileprovider.fpfs#P, and codesign refuses a bundle carrying them --
+#
+#   love.app: resource fork, Finder information, or similar detritus not
+#   allowed
+#
+# Stripping with `xattr -cr` does not hold, because the file provider puts them
+# straight back on the next sync. Building somewhere iCloud does not manage is
+# the fix, and it is much faster besides -- build artifacts have no business
+# being synced. Override with VOXELTRAIL_BUILD_DIR.
+BUILD_DIR="${VOXELTRAIL_BUILD_DIR:-}"
+if [ -z "$BUILD_DIR" ]; then
+  case "$ROOT" in
+    *"/Mobile Documents/"*)
+      BUILD_DIR="$HOME/Library/Developer/VoxelTrail/$(basename "$ROOT")-build" ;;
+    *)
+      BUILD_DIR="$IOS_DIR/build" ;;
+  esac
+fi
 DIST="$ROOT/dist/ios"
 OVERLAY_PLIST="$IOS_DIR/overlays/love-ios.plist"
 XCODE_DIR="$LOVE_SRC/platform/xcode"
@@ -39,18 +63,19 @@ RESOURCES_DIR="$XCODE_DIR/ios/resources"
 LOVE_FILE="$RESOURCES_DIR/game.love"
 LIBS_DIR="$XCODE_DIR/ios/libraries"
 
-APP_NAME="gen1recomp"
-DISPLAY_NAME="gen1recomp"
+APP_NAME="VoxelTrail"
+DISPLAY_NAME="VoxelTrail"
+DEPLOYMENT_TARGET="16.0"
+ICON_SOURCE="$IOS_DIR/branding/VoxelTrail-AppIcon-Source.png"
 # Bundle ID resolution, most specific wins:
 #   1. GEN1_BUNDLE_ID env var
 #   2. mobile/ios/bundle_id.local (one line, gitignored — pins YOUR install
 #      so rebuilds keep updating the same app on your phone)
-#   3. device builds: com.gen1recomp.t<your team id> — explicit App IDs are
-#      globally unique across ALL Apple accounts (and required once
-#      capabilities like HealthKit are involved), so a per-team default
-#      lets anyone build without colliding with someone else's app
+#   3. device builds: app.voxeltrail.t<your team id> — explicit App IDs are
+#      globally unique across Apple accounts, so a per-team default lets
+#      anyone build without colliding with someone else's app
 #   4. simulator: the project default (no App ID registration involved)
-BUNDLE_ID="${GEN1_BUNDLE_ID:-}"
+BUNDLE_ID="${VOXELTRAIL_BUNDLE_ID:-${GEN1_BUNDLE_ID:-}}"
 if [ -z "$BUNDLE_ID" ] && [ -f "$IOS_DIR/bundle_id.local" ]; then
   BUNDLE_ID="$(tr -d '[:space:]' < "$IOS_DIR/bundle_id.local")"
 fi
@@ -62,10 +87,12 @@ APPLE_LIBS_URL="https://github.com/love2d/love/releases/download/${LOVE_VERSION}
 
 FETCH=false
 DEVICE=false
+UNSIGNED=false
 RELEASE=false
 PACKAGE_ONLY=false
 INSTALL=false
 VERSION=""
+ALLOW_UNSTAGED=false
 
 say()  { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mwarn:\033[0m %s\n' "$*" >&2; }
@@ -75,15 +102,17 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --fetch) FETCH=true ;;
     --device) DEVICE=true ;;
+    --unsigned) UNSIGNED=true ;;
     --release) RELEASE=true ;;
     --package-only) PACKAGE_ONLY=true ;;
+    --allow-unstaged) ALLOW_UNSTAGED=true ;;
     --install) INSTALL=true ;;
     --version) VERSION="$2"; shift ;;
     -h|--help)
       sed -n '2,24p' "$0"
       exit 0
       ;;
-    *) fail "unknown argument: $1 (try --fetch, --device, --release, --version, --install, or --package-only)" ;;
+    *) fail "unknown argument: $1 (try --fetch, --device, --unsigned, --release, --version, --install, --allow-unstaged, or --package-only)" ;;
   esac
   shift
 done
@@ -116,7 +145,13 @@ detect_team() {
     | sed -n 's/.*OU *= *\([A-Z0-9]*\).*/\1/p' \
     | head -1
 }
-if $DEVICE && [ -z "${DEVELOPMENT_TEAM:-}" ]; then
+if $UNSIGNED && ! $DEVICE; then
+  fail "--unsigned is only meaningful with --device"
+fi
+if $UNSIGNED && $INSTALL; then
+  fail "--install cannot install an unsigned IPA; sign it with your sideload tool first"
+fi
+if $DEVICE && ! $UNSIGNED && [ -z "${DEVELOPMENT_TEAM:-}" ]; then
   DEVELOPMENT_TEAM="$(detect_team || true)"
   if [ -n "$DEVELOPMENT_TEAM" ]; then
     say "signing team auto-detected from keychain: $DEVELOPMENT_TEAM"
@@ -128,10 +163,10 @@ if $DEVICE && [ -z "${DEVELOPMENT_TEAM:-}" ]; then
   fi
 fi
 if [ -z "$BUNDLE_ID" ]; then
-  if $DEVICE; then
-    BUNDLE_ID="com.gen1recomp.t$(printf '%s' "$DEVELOPMENT_TEAM" | tr '[:upper:]' '[:lower:]')"
+  if $DEVICE && ! $UNSIGNED; then
+    BUNDLE_ID="app.voxeltrail.t$(printf '%s' "$DEVELOPMENT_TEAM" | tr '[:upper:]' '[:lower:]')"
   else
-    BUNDLE_ID="com.theboisclub.pokemonred"
+    BUNDLE_ID="app.voxeltrail.local"
   fi
 fi
 
@@ -228,23 +263,79 @@ apply_ios_branding() {
   cp "$OVERLAY_PLIST" "$dest"
 }
 
+apply_ios_icons() {
+  [ -f "$ICON_SOURCE" ] || fail "missing icon source: $ICON_SOURCE"
+  local icon_dir="$XCODE_DIR/Images.xcassets/iOS AppIcon.appiconset"
+  [ -d "$icon_dir" ] || fail "missing iOS app icon set: $icon_dir"
+  say "generating VoxelTrail iPhone/iPad app icons"
+  local spec name px
+  for spec in \
+    "icon-29pt@1x.png:29" "icon-29pt@2x.png:58" "icon-29pt@3x.png:87" \
+    "icon-40pt@1x.png:40" "icon-40pt@2x.png:80" "icon-40pt@3x.png:120" \
+    "icon-60pt@2x.png:120" "icon-60pt@3x.png:180" \
+    "icon-76pt@1x.png:76" "icon-76pt@2x.png:152" \
+    "icon-83.5pt@2x.png:167" "icon-1024pt@1x.png:1024"; do
+    name="${spec%%:*}"
+    px="${spec##*:}"
+    sips -z "$px" "$px" "$ICON_SOURCE" --out "$icon_dir/$name" >/dev/null
+  done
+}
+
 # --------------------------------------------------------------- game.love
 pack_game_love() {
   say "packing game.love for love-ios resources"
   mkdir -p "$RESOURCES_DIR"
   rm -f "$LOVE_FILE"
+  local pack_tmp staged_love
+  pack_tmp="$(mktemp -d /private/tmp/voxeltrail-love.XXXXXX)"
+  staged_love="$pack_tmp/game.love"
   # Same payload as scripts/build.sh / build_android.sh: game sources plus
   # tools/save-editor, which the launcher's Edit button opens in-process.
-  # Deliberately NO fused mods: a mod inside game.love sits in the
-  # read-only app bundle, so the mod manager's Delete can't remove it and
-  # it reappears every launch.  Mods install as .zips at runtime instead
-  # (launcher -> MODS -> Import mod .zip), the same lifecycle as every
-  # other platform.
-  (cd "$ROOT" && zip -q -9 -r "$LOVE_FILE" \
-    main.lua conf.lua src data assets tools/save-editor \
-    tools/rom_manifest.json tools/rom_manifest_blue.json \
-    -x '*.DS_Store' -x '*/.git/*' -x '*/.DS_Store' \
-    -x 'data/generated/*' -x 'assets/generated/*')
+  # VoxelTrail intentionally ships DramaticShapeVoxelMod as its built-in 3D
+  # renderer. It remains disableable in the mod manager; user-added mods
+  # continue to install into the writable save directory.
+  if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    # iCloud can take minutes to hydrate thousands of individual files for
+    # Info-ZIP. Git's object store produces the tracked engine payload in one
+    # stream; overlay the bundled renderer from the working tree afterward.
+    # `git write-tree` below writes the INDEX, so a tracked file edited but
+    # not staged is packaged at its OLD content -- silently, and the build
+    # still succeeds. That produces an artifact that does not match the
+    # working tree the developer just tested, which is worse than a failure
+    # because nothing anywhere says so. Refuse instead.
+    local dirty
+    dirty="$(git -C "$ROOT" diff --name-only -- \
+      main.lua conf.lua src data assets mods/DramaticShapeVoxelMod \
+      tools/save-editor tools/rom_manifest.json tools/rom_manifest_blue.json \
+      tools/rom_manifest_yellow.json)"
+    if [ -n "$dirty" ] && [ "$ALLOW_UNSTAGED" != true ]; then
+      fail "unstaged changes would NOT be packaged (the payload comes from the
+git index). Stage them with 'git add' -- or pass --allow-unstaged to build the
+staged content deliberately:
+$dirty"
+    fi
+    local archive_tree="HEAD"
+    if ! git -C "$ROOT" diff --cached --quiet -- \
+        main.lua conf.lua src data assets mods/DramaticShapeVoxelMod \
+        tools/save-editor tools/rom_manifest.json tools/rom_manifest_blue.json \
+        tools/rom_manifest_yellow.json; then
+      archive_tree="$(git -C "$ROOT" write-tree)"
+    fi
+    git -C "$ROOT" archive --format=zip --output="$staged_love" \
+      "$archive_tree" main.lua conf.lua src data assets \
+      mods/DramaticShapeVoxelMod tools/save-editor \
+      tools/rom_manifest.json tools/rom_manifest_blue.json \
+      tools/rom_manifest_yellow.json
+  else
+    (cd "$ROOT" && zip -q -9 -r "$staged_love" \
+      main.lua conf.lua src data assets mods/DramaticShapeVoxelMod tools/save-editor \
+      tools/rom_manifest.json tools/rom_manifest_blue.json \
+      tools/rom_manifest_yellow.json \
+      -x '*.DS_Store' -x '*/.git/*' -x '*/.DS_Store' \
+      -x 'data/generated/*' -x 'assets/generated/*')
+  fi
+  cp "$staged_love" "$LOVE_FILE"
+  rm -rf "$pack_tmp"
   # NOTE: grep -q here would race pipefail — it exits on first match, unzip
   # dies of SIGPIPE (141), and the pipeline "fails" nondeterministically.
   # >/dev/null keeps grep reading the whole stream instead.
@@ -254,6 +345,34 @@ pack_game_love() {
   fi
   unzip -Z1 "$LOVE_FILE" | grep -x 'tools/save-editor/App.lua' >/dev/null \
     || fail "game.love is missing the save editor (Edit on a save row would crash)"
+  unzip -Z1 "$LOVE_FILE" \
+    | grep -x 'mods/DramaticShapeVoxelMod/manifest.json' >/dev/null \
+    || fail "game.love is missing DramaticShapeVoxelMod"
+  # Every lib/ module the working tree has, not just the manifest.
+  #
+  # The payload comes out of `git archive`, so a mod source file that is
+  # merely UNTRACKED is dropped without a word -- and the mod does not fail
+  # at load, it fails at the first V.require of the missing module, with
+  # "lib/X.lua is missing -- reinstall the mod" pointing the player at their
+  # install rather than at this build. That is exactly how a new lib/ module
+  # shipped empty once. Compare the two lists instead of trusting the archive.
+  local missing
+  missing="$(
+    for lua in "$ROOT"/mods/DramaticShapeVoxelMod/lib/*.lua; do
+      [ -e "$lua" ] || continue
+      rel="mods/DramaticShapeVoxelMod/lib/$(basename "$lua")"
+      unzip -Z1 "$LOVE_FILE" | grep -x "$rel" >/dev/null || echo "$rel"
+    done
+  )"
+  if [ -n "$missing" ]; then
+    fail "game.love is missing mod sources (untracked in git?):
+$missing"
+  fi
+  for manifest in tools/rom_manifest.json tools/rom_manifest_blue.json \
+                  tools/rom_manifest_yellow.json; do
+    unzip -Z1 "$LOVE_FILE" | grep -x "$manifest" >/dev/null \
+      || fail "game.love is missing $manifest"
+  done
   say "game.love: $(du -h "$LOVE_FILE" | cut -f1) -> $LOVE_FILE"
 }
 
@@ -386,17 +505,15 @@ run_xcodebuild() {
     SYMROOT="$BUILD_DIR/Build/Products"
     OBJROOT="$BUILD_DIR/Build/Intermediates"
     PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID"
+    IPHONEOS_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET"
     MARKETING_VERSION="$marketing_version"
     CURRENT_PROJECT_VERSION="$project_version"
     ONLY_ACTIVE_ARCH=NO
   )
 
-  if ! $DEVICE; then
-    # Simulator: ad-hoc signing (no certificate needed). A plain unsigned
-    # build would drop the entitlements file, and HealthKit refuses to run
-    # without the com.apple.developer.healthkit entitlement even in the
-    # simulator.
-    args+=(CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=-)
+  if ! $DEVICE || $UNSIGNED; then
+    # Simulator and resignable device archives need no development profile.
+    args+=(CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=)
   else
     warn "device build: configure signing in Xcode or set DEVELOPMENT_TEAM / CODE_SIGN_IDENTITY"
     if [ -n "${DEVELOPMENT_TEAM:-}" ]; then
@@ -467,18 +584,20 @@ run_xcodebuild() {
 
   say "iOS app: $app"
   say "bundle id: $BUNDLE_ID  display: $DISPLAY_NAME"
-  if $DEVICE; then
+  if $DEVICE && ! $UNSIGNED; then
     if $INSTALL; then
       install_to_device "$app"
     else
       say "install with: scripts/build_ios.sh --device --install (iPhone plugged in + unlocked)"
     fi
-  else
+  elif ! $DEVICE; then
     say "simulator tip: xcrun simctl install booted \"$app\""
+  else
+    say "unsigned IPA ready for an external sideload signer; do not install the raw .app"
   fi
 }
 
-# Pack Payload/<app>.app into dist/ios/gen1recomp.ipa for release / sideload tools.
+# Pack Payload/<app>.app into dist/ios/VoxelTrail.ipa for sideload tools.
 package_ipa() {
   local app="$1"
   local ipa="$DIST/$APP_NAME.ipa"
@@ -524,6 +643,7 @@ install_to_device() {
 
 # --------------------------------------------------------------- main
 apply_ios_branding
+apply_ios_icons
 say "applying iOS native bridge patches (picker/Files support)"
 python3 "$IOS_DIR/patch_love_src.py" || fail "patch_love_src.py failed"
 pack_game_love
