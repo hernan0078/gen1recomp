@@ -69,12 +69,19 @@ function Zoom.applyOptions(opts)
   Zoom.offset = math.floor(tonumber(opts and opts.zoom) or 0)
 end
 
--- FIT / OUT1 / OUT2 / … / IN1 / IN2 / …
+-- FIT / WIDE 1 / WIDE 2 / … / NEAR 1 / NEAR 2 / …
+--
+-- "IN1"/"OUT1" read as jargon in a menu row that is otherwise plain English,
+-- and on a phone -- where the options rows are the only way to zoom, there
+-- being no wheel or hotkey -- the row has to say what it does on its own.
+-- NEAR/WIDE name the result rather than the direction of travel, and the
+-- number still counts the rungs, so the range stays as long as the screen
+-- allows.
 function Zoom.offsetLabel(offset)
   offset = math.floor(tonumber(offset) or 0)
   if offset == 0 then return "FIT" end
-  if offset < 0 then return "OUT" .. tostring(-offset) end
-  return "IN" .. tostring(offset)
+  if offset < 0 then return "WIDE " .. tostring(-offset) end
+  return "NEAR " .. tostring(offset)
 end
 
 -- world pixels covered by a w x h letterbox viewport at fit scale S

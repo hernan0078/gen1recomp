@@ -1896,8 +1896,8 @@ do
 
   -- cycle wraps survey → … → close-up → survey; labels track offset
   eq(Zoom.offsetLabel(0), "FIT", "zoom label FIT at offset 0")
-  eq(Zoom.offsetLabel(-2), "OUT2", "zoom label OUT for negative offset")
-  eq(Zoom.offsetLabel(3), "IN3", "zoom label IN for positive offset")
+  eq(Zoom.offsetLabel(-2), "WIDE 2", "zoom label WIDE for negative offset")
+  eq(Zoom.offsetLabel(3), "NEAR 3", "zoom label NEAR for positive offset")
   Zoom.offset = S -- max close-up
   eq(Zoom.cycle(S), 1 - S, "zoom cycle wraps from max in to full survey")
   Zoom.applyOptions({ zoom = -1 })
