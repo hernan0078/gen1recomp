@@ -491,9 +491,41 @@ function Renderer:endFrame(zones, worldZones)
   local Sx, Sy = Sp / dpiX, Sp / dpiY
   local uiw, uih = self:uiSize()
   local vpw, vph = uiw * Sx, uih * Sy
+  -- Portrait phones: centre the screen in the space ABOVE the touch pad
+  -- rather than in the whole window.
+  --
+  -- A 10:9 screen scaled to the width of an upright phone leaves most of the
+  -- height empty, and centring in the window splits that emptiness evenly --
+  -- a band of black above, and a band below that the on-screen pad is drawn
+  -- into, so the picture sits behind the player's thumbs with dead space over
+  -- it. Measuring the pad and centring in what is left puts the picture where
+  -- the eyes are and the controls where the hands are.
+  --
+  -- Measured through TouchControls:layout() rather than assumed, so a custom
+  -- pad position from the layout editor moves the screen with it. Landscape,
+  -- desktop, and a hidden pad (a controller is connected) all fall through to
+  -- plain centring.
+  local lift = 0
+  if wh > ww then
+    local ok, TC = pcall(require, "src.core.TouchControls")
+    if ok and TC and TC.visible and TC:visible() then
+      local okL, L = pcall(TC.layout, TC)
+      if okL and L and L.dpad then
+        -- highest point any control reaches, in framebuffer pixels
+        local top = math.huge
+        for _, z in pairs(L) do
+          if type(z) == "table" and z.cy and z.w then
+            top = math.min(top, (z.cy - z.w / 2) * dpiY)
+          end
+        end
+        if top < ph then lift = (ph - top) / 2 end
+      end
+    end
+  end
   -- Snap the letterbox origin to a framebuffer pixel, then convert to units.
   local ox = math.floor((pw - uiw * Sp) / 2) / dpiX
-  local oy = math.floor((ph - uih * Sp) / 2) / dpiY
+  local oy = math.floor((ph - uih * Sp) / 2 - lift) / dpiY
+  if oy < 0 then oy = 0 end
   local GBCFX = require("src.render.GBCFX")
   -- Forced mono/Classic modes still need a whole-screen zone when a state
   -- exposes no SGB packets (raw DMG canvas), so sendColors can remap.
@@ -620,7 +652,10 @@ function Renderer:endFrame(zones, worldZones)
     local wvw = self.worldCanvas:getWidth()
     local wvh = self.worldCanvas:getHeight()
     local wox = math.floor((pw - wvw * sp) / 2) / dpiX
-    local woy = math.floor((ph - wvh * sp) / 2) / dpiY
+    -- the same portrait lift the UI canvas took, or the world would slide out
+    -- from under the HUD that is drawn over it
+    local woy = math.floor((ph - wvh * sp) / 2 - lift) / dpiY
+    if woy < 0 then woy = 0 end
     -- Tilt mode projects the ground world pass through the perspective mesh
     -- (SGB zones baked in beforehand -- see drawTiltedWorld -- so no zone
     -- scissoring here).  drawTiltedWorld returns false when tilt is off or

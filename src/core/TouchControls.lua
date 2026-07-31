@@ -100,12 +100,36 @@ function TouchControls.defaultLayout(ww, wh)
   local abW = dpadW * 0.46
   local ssW = dpadW * 0.30
   local margin = dpadW * 0.12
+  -- A phone held upright is far taller than the 10:9 screen needs, so the pad
+  -- does not have to hug the bottom edge -- and it should not. That edge is
+  -- where the home indicator lives, and a thumb parked on it runs the system
+  -- swipe instead of the d-pad. Landscape has no room to give and is left
+  -- exactly as it was.
+  --
+  -- The freed strip is spent three ways: the cluster rises clear of the
+  -- indicator, START/SELECT drop to a row of their own instead of being
+  -- wedged between the two thumbs, and the screen itself moves up to sit
+  -- above the pad rather than behind it (Renderer's portrait lift, which
+  -- measures the pad through this very layout, so the two cannot disagree).
+  local portrait = wh > ww
+  if not portrait then
+    return {
+      dpad = { cx = margin + dpadW / 2, cy = wh - margin - dpadW / 2, w = dpadW },
+      a = { cx = ww - margin - abW * 0.55, cy = wh - margin - abW * 1.75, w = abW },
+      b = { cx = ww - margin - abW * 1.60, cy = wh - margin - abW * 0.55, w = abW },
+      start = { cx = ww / 2 + ssW * 0.60, cy = wh - margin - ssW * 0.95, w = ssW },
+      select = { cx = ww / 2 - ssW * 0.60, cy = wh - margin - ssW * 0.95, w = ssW },
+    }
+  end
+  -- the row START/SELECT sit on, and the taller floor the pad stands on
+  local ssRow = wh - margin - ssW * 0.95
+  local bottom = margin + short * 0.20
   return {
-    dpad = { cx = margin + dpadW / 2, cy = wh - margin - dpadW / 2, w = dpadW },
-    a = { cx = ww - margin - abW * 0.55, cy = wh - margin - abW * 1.75, w = abW },
-    b = { cx = ww - margin - abW * 1.60, cy = wh - margin - abW * 0.55, w = abW },
-    start = { cx = ww / 2 + ssW * 0.60, cy = wh - margin - ssW * 0.95, w = ssW },
-    select = { cx = ww / 2 - ssW * 0.60, cy = wh - margin - ssW * 0.95, w = ssW },
+    dpad = { cx = margin + dpadW / 2, cy = wh - bottom - dpadW / 2, w = dpadW },
+    a = { cx = ww - margin - abW * 0.55, cy = wh - bottom - abW * 1.95, w = abW },
+    b = { cx = ww - margin - abW * 1.80, cy = wh - bottom - abW * 0.55, w = abW },
+    start = { cx = ww / 2 + ssW * 0.85, cy = ssRow, w = ssW },
+    select = { cx = ww / 2 - ssW * 0.85, cy = ssRow, w = ssW },
   }
 end
 
