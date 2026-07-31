@@ -118,6 +118,36 @@ function Renderer:setWorldOverride(canvas)
   self.worldOverride = canvas
 end
 
+-- Framebuffer pixels the screen is raised by on a portrait phone, so it sits
+-- above the touch pad instead of behind it (endFrame applies it to both the
+-- UI and the world canvas).
+--
+-- Public, and the ONLY copy of this number, because callers outside the
+-- renderer have to land on the same letterbox: the 3D mod pins its battle
+-- billboards to letterbox coordinates it derives itself, and anything that
+-- disagrees here draws its panels at the old centre while the picture sits
+-- at the new one.
+--
+-- Returns 0 for landscape, desktop, and a hidden pad (a controller is
+-- connected), which is every case where the screen is plainly centred.
+function Renderer.portraitLift(ph, dpiY)
+  local ww, wh = love.graphics.getDimensions()
+  if wh <= ww then return 0 end
+  local ok, TC = pcall(require, "src.core.TouchControls")
+  if not (ok and TC and TC.visible and TC:visible()) then return 0 end
+  local okL, L = pcall(TC.layout, TC)
+  if not (okL and L and L.dpad) then return 0 end
+  -- highest point any control reaches, in framebuffer pixels
+  local top = math.huge
+  for _, z in pairs(L) do
+    if type(z) == "table" and z.cy and z.w then
+      top = math.min(top, (z.cy - z.w / 2) * dpiY)
+    end
+  end
+  if top >= ph then return 0 end
+  return (ph - top) / 2
+end
+
 -- Integer framebuffer pixels per GB pixel that fit the window.  Zoom /
 -- GBCFX / callers treat this as the crisp scale; endFrame converts to LOVE
 -- units via / dpiX and / dpiY when drawing.
@@ -505,23 +535,7 @@ function Renderer:endFrame(zones, worldZones)
   -- pad position from the layout editor moves the screen with it. Landscape,
   -- desktop, and a hidden pad (a controller is connected) all fall through to
   -- plain centring.
-  local lift = 0
-  if wh > ww then
-    local ok, TC = pcall(require, "src.core.TouchControls")
-    if ok and TC and TC.visible and TC:visible() then
-      local okL, L = pcall(TC.layout, TC)
-      if okL and L and L.dpad then
-        -- highest point any control reaches, in framebuffer pixels
-        local top = math.huge
-        for _, z in pairs(L) do
-          if type(z) == "table" and z.cy and z.w then
-            top = math.min(top, (z.cy - z.w / 2) * dpiY)
-          end
-        end
-        if top < ph then lift = (ph - top) / 2 end
-      end
-    end
-  end
+  local lift = Renderer.portraitLift(ph, dpiY)
   -- Snap the letterbox origin to a framebuffer pixel, then convert to units.
   local ox = math.floor((pw - uiw * Sp) / 2) / dpiX
   local oy = math.floor((ph - uih * Sp) / 2 - lift) / dpiY
