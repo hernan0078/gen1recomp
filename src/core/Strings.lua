@@ -37,7 +37,31 @@
 local Strings = {}
 
 local catalog = nil   -- Data.strings once a mod has put something in it
+local builtin = nil   -- src/core/lang/<code>.lua for the chosen language
 local missing = {}    -- format-arity complaints, reported once each
+
+-- The language the app's own text is drawn in.  "en" means the sources as
+-- written, and costs nothing: `builtin` stays nil and lookup is unchanged.
+--
+-- Separate from the mod catalog on purpose.  A translation MOD is a player's
+-- explicit choice and stays ahead of this in the lookup; this is the app
+-- speaking the language of the phone it is running on.
+Strings.language = "en"
+
+function Strings.setLanguage(code)
+  code = (type(code) == "string" and code ~= "" ) and code or "en"
+  if code == Strings.language and (code == "en" or builtin) then return end
+  Strings.language = code
+  builtin = nil
+  if code == "en" then return end
+  local ok, table_ = pcall(require, "src.core.lang." .. code)
+  if ok and type(table_) == "table" then
+    builtin = table_
+  else
+    require("src.core.Logger").warn(
+      "strings: no built-in catalog for language %q", code)
+  end
+end
 
 -- Called from Game after the mod merge, and again on dev-mode hot reload.
 -- Holding the table (not a copy) means a mod that registers late still
@@ -60,14 +84,25 @@ end
 -- that collide; the plain key is tried after it, so a translation that does
 -- not care about the distinction can supply one entry for both.
 function Strings.lookup(source, context)
-  if not catalog then return source end
-  if context then
-    local hit = catalog[context .. "|" .. source]
-    if type(hit) == "string" then return hit end
+  -- Order matters: a mod's override beats the built-in translation, because
+  -- installing a translation mod is a deliberate act and the built-in one is
+  -- a default.  Both are tried context-first, then plain.
+  --
+  -- Written out rather than looped over { catalog, builtin }: `catalog` is
+  -- nil whenever no translation mod is loaded, and ipairs stops dead at the
+  -- first nil -- so the built-in table was never reached in the one case it
+  -- exists for.
+  local function hit(from)
+    if not from then return nil end
+    if context then
+      local c = from[context .. "|" .. source]
+      if type(c) == "string" then return c end
+    end
+    local p = from[source]
+    if type(p) == "string" then return p end
+    return nil
   end
-  local hit = catalog[source]
-  if type(hit) == "string" then return hit end
-  return source
+  return hit(catalog) or hit(builtin) or source
 end
 
 -- Count `%`-directives so a translation that drops or adds one is caught

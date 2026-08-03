@@ -2679,6 +2679,21 @@ function RomImporter:mousepressed(x, y, button)
     if self.onEditTouchControls then self.onEditTouchControls() end
     return
   end
+  if inside(self.languageRect, x, y) then
+    -- Applied and persisted together: the label redraws in the new language
+    -- on the very next frame, which is the only confirmation a player who
+    -- cannot read the old one is going to get.
+    local Strings_ = require("src.core.Strings")
+    local SaveData = require("src.core.SaveData")
+    local next_ = (Strings_.language == "es") and "en" or "es"
+    Strings_.setLanguage(next_)
+    local ok, opts = pcall(SaveData.loadOptions)
+    if ok and type(opts) == "table" then
+      opts.language = next_
+      pcall(SaveData.saveOptions, opts)
+    end
+    return
+  end
   -- SAVE SLOT rows / Edit / Delete.  The two labels are checked first so a tap
   -- on either never also selects the row.  A press only ARMS a row click:
   -- _updateSlotDrag commits it on release when the pointer did not move (a
@@ -2983,7 +2998,7 @@ function RomImporter:_playButton(x, y, w, h, gameName, ready, locked)
       love.graphics.setBlendMode("alpha")
     end
     buttonShine(x, y, w, h, r, (pulse % 2.8) / 2.8)
-    local label = "Play " .. gameName
+    local label = Strings("Play %s", gameName)
     local tw = self.playFont:getWidth(label)
     local tri = self.playFont:getHeight() * 0.55
     local groupW = tri + 12 * s + tw
@@ -3119,8 +3134,12 @@ function RomImporter:_drawGamePanel(version, x, y, w, h, paged)
   -- solely because id == "yellow").
   local info = GameVersion.info(version)
   local locked = info == nil
+  -- Translated at the point of use rather than in GameVersion: the name
+  -- there is the game's identity (and keys the cache), while this is the
+  -- word a player reads. Untranslated languages get the English name back.
   local gameName = info and (info.launcherName or info.displayName)
                    or tostring(version)
+  if gameName then gameName = Strings(gameName) end
   local ready = (not locked) and self.ready[version] or false
 
   -- header: name + status pill
@@ -3129,9 +3148,9 @@ function RomImporter:_drawGamePanel(version, x, y, w, h, paged)
   printB(gameName, x, y)
   local nameW = self.gameNameFont:getWidth(gameName)
   local pill
-  if ready then pill = { text = "GOOD TO GO", c = PAL.green }
+  if ready then pill = { text = Strings("GOOD TO GO"), c = PAL.green }
   elseif locked then pill = { text = "COMING SOON", c = PAL.disabledInk }
-  else pill = { text = "ROM REQUIRED", c = PAL.gold } end
+  else pill = { text = Strings("ROM REQUIRED"), c = PAL.gold } end
   love.graphics.setFont(self.pillFont)
   local pw = self.pillFont:getWidth(pill.text) + 24 * s
   local ph = self.pillFont:getHeight() + 8 * s
@@ -3175,12 +3194,12 @@ function RomImporter:_drawGamePanel(version, x, y, w, h, paged)
       romProgress = self.progress or 0
     elseif ready then
       romState = self.romName[version] or Strings("ROM imported")
-      romDetail = "Verified."
-      romBtnLabel, romBtnEnabled = "Re-import ROM", true
+      romDetail = Strings("Verified.")
+      romBtnLabel, romBtnEnabled = Strings("Re-import ROM"), true
     elseif erroring then
       romState = "Import failed"
       romDetail = self.detail or Strings("That ROM could not be imported.")
-      romBtnLabel, romBtnEnabled = "Import ROM", true
+      romBtnLabel, romBtnEnabled = Strings("Import ROM"), true
     elseif notice then
       romState = "No ROM imported"
       romDetail = trim((notice.status or "") .. " " .. (notice.detail or ""))
@@ -3230,7 +3249,7 @@ function RomImporter:_drawGamePanel(version, x, y, w, h, paged)
     sfHintText, sfHintCol = "Not available yet.", PAL.warning
   elseif self.android then
     sfHintText, sfHintCol =
-      "Import or export a .sav with the system file picker.", PAL.warning
+      Strings("Import or export a .sav with the system file picker."), PAL.warning
   else
     sfHintText, sfHintCol =
       "Import a .sav to a new slot, or export the active slot.", PAL.warning
@@ -3270,7 +3289,7 @@ function RomImporter:_drawGamePanel(version, x, y, w, h, paged)
   local ix, iy = leftX + pad, romY + pad
   love.graphics.setFont(self.labelFont)
   col(PAL.labelGray)
-  printSpaced(self.labelFont, "ROM", ix, iy, 2 * s)
+  printSpaced(self.labelFont, Strings("ROM"), ix, iy, 2 * s)
   iy = iy + labelH + 10 * s
   love.graphics.setFont(self.stateFont)
   col(PAL.white)
@@ -3302,14 +3321,14 @@ function RomImporter:_drawGamePanel(version, x, y, w, h, paged)
   ix, iy = leftX + pad, saveFilesY + pad
   love.graphics.setFont(self.labelFont)
   col(PAL.labelGray)
-  printSpaced(self.labelFont, "SAVE FILES", ix, iy, 2 * s)
+  printSpaced(self.labelFont, Strings("SAVE FILES"), ix, iy, 2 * s)
   iy = iy + labelH + 10 * s
   local bGap = 10 * s
   local halfW = (innerW - bGap) / 2
   self.saveImportRect =
-    self:_glassyButton(ix, iy, halfW, sfBtnH, "Import save", self.saveBtnFont, sfImportEnabled)
+    self:_glassyButton(ix, iy, halfW, sfBtnH, Strings("Import save"), self.saveBtnFont, sfImportEnabled)
   self.saveExportRect = self:_glassyButton(ix + halfW + bGap, iy, halfW, sfBtnH,
-    "Export save", self.saveBtnFont, sfExportEnabled)
+    Strings("Export save"), self.saveBtnFont, sfExportEnabled)
   iy = iy + sfBtnH + 6 * s
   love.graphics.setFont(self.hintFont)
   col(sfHintCol)
@@ -3331,10 +3350,22 @@ function RomImporter:_drawGamePanel(version, x, y, w, h, paged)
     self.saveFolderRect = frect
   end
 
-  -- Touch Controls: open the drag-to-reposition / disable editor (#327).
+  -- Touch Controls, and beside it the app's language.
+  --
+  -- The language belongs HERE rather than in the in-game OPTIONS menu: this
+  -- is the first screen anyone sees, it is the screen most in need of being
+  -- readable, and a player who cannot read it has no reason to know that
+  -- starting a game and opening a menu would let them fix that.
   if self.onEditTouchControls and touchBtnH > 0 then
+    local half = (colW - 10 * s) / 2
     self.touchControlsRect = self:_glassyButton(
-      leftX, touchY, colW, touchBtnH, "Touch Controls", self.saveBtnFont, true)
+      leftX, touchY, half, touchBtnH, Strings("Touch Controls"),
+      self.saveBtnFont, true)
+    local Strings_ = require("src.core.Strings")
+    self.languageRect = self:_glassyButton(
+      leftX + half + 10 * s, touchY, half, touchBtnH,
+      (Strings_.language == "es") and "ESPANOL" or "ENGLISH",
+      self.saveBtnFont, true)
   end
 
   -- Play button
@@ -3610,7 +3641,7 @@ function RomImporter:_drawSaveSlotPanel(version, x, y, w, h, paged)
   -- header: "SAVE SLOT" (left) + "N slots" / "1 slot" (right)
   love.graphics.setFont(self.labelFont)
   col(PAL.labelGray)
-  printSpaced(self.labelFont, "SAVE SLOT", x + pad, y + pad, 2 * s)
+  printSpaced(self.labelFont, Strings("SAVE SLOT"), x + pad, y + pad, 2 * s)
   local countTxt = (n == 1) and "1 slot" or (n .. " slots")
   local cw = self.labelFont:getWidth(countTxt)
   love.graphics.print(countTxt, x + w - pad - cw, y + pad)
@@ -3671,8 +3702,8 @@ function RomImporter:_drawSaveSlotPanel(version, x, y, w, h, paged)
         -- so the row never reflows (#433).
         love.graphics.setFont(self.hintFont)
         local darmed = armedDelete(self._confirmDelete, "slot", slot.id, version)
-        local delLabel = darmed and "Sure?" or "Delete"
-        local delW = self.hintFont:getWidth("Delete") + 24 * s
+        local delLabel = darmed and Strings("Sure?") or Strings("Delete")
+        local delW = self.hintFont:getWidth(delLabel) + 24 * s
         local delX = rx + rw - 12 * s - delW
         local delY = ry + rowH - rowPadV - chipBtnH
         local drect = self:_chipButton(delX, delY, delLabel, {
@@ -3686,9 +3717,10 @@ function RomImporter:_drawSaveSlotPanel(version, x, y, w, h, paged)
         -- slot actually holds a save.
         local erect = nil
         if self.onEditSave and slot.exists then
-          local edW = self.hintFont:getWidth("Edit") + 24 * s
+          local edLabel = Strings("Edit")
+          local edW = self.hintFont:getWidth(edLabel) + 24 * s
           local edX = delX - btnGap - edW
-          erect = self:_chipButton(edX, delY, "Edit", {
+          erect = self:_chipButton(edX, delY, edLabel, {
             w = edW, h = chipBtnH, id = slot.id, kind = "accent",
           })
           rightReserve = rightReserve + edW + btnGap + 6 * s
@@ -3698,7 +3730,7 @@ function RomImporter:_drawSaveSlotPanel(version, x, y, w, h, paged)
         local pillW = 0
         if selected then
           love.graphics.setFont(self.warningFont)
-          local pText = "LOADED"
+          local pText = Strings("LOADED")
           local pw = self.warningFont:getWidth(pText) + 14 * s
           local ph = loadedH
           local ppx = rx + rw - 12 * s - pw
@@ -3722,7 +3754,7 @@ function RomImporter:_drawSaveSlotPanel(version, x, y, w, h, paged)
           metaTxt = Strings("%d badges - %s - %d caught", slot.meta.badges or 0, slot.meta.timeText or "0:00",
             slot.meta.dexCount or 0)
         else
-          metaTxt = "empty slot"
+          metaTxt = Strings("empty slot")
         end
         love.graphics.setFont(self.labelFont)
         col(PAL.warning)
@@ -4049,7 +4081,7 @@ end
 
 -- The status-chip label + colour for a mod row (deriveList's status verdict).
 local function modStatusChip(status)
-  if status == "ok" then return "Ready", PAL.green end
+  if status == "ok" then return Strings("Ready"), PAL.green end
   if status == "conflict" then return "Conflict", PAL.red end
   return "Incompatible", PAL.gold   -- "warn": bad range or missing dependency
 end
@@ -4080,7 +4112,7 @@ function RomImporter:_drawModsPanel(x, y, w, h, paged)
   love.graphics.print(Strings("%d of %d enabled", enabledCount, #mods),
     x + nameW + 14 * s, y + (headerH - self.hintFont:getHeight()) / 2)
 
-  local btnLabel = "Import mod .zip"
+  local btnLabel = Strings("Import mod .zip")
   local btnH = math.max(38 * s, self.saveBtnFont:getHeight() + 20 * s)
   local btnW = math.min(w * 0.5, self.saveBtnFont:getWidth(btnLabel) + 40 * s)
   local btnX = x + w - btnW
@@ -4097,7 +4129,7 @@ function RomImporter:_drawModsPanel(x, y, w, h, paged)
     love.graphics.printf(self.modNotice.text, x, top, w, "left")
   else
     col(PAL.warning)
-    love.graphics.printf(self.android and "Or copy a mod .zip via USB."
+    love.graphics.printf(self.android and Strings("Or copy a mod .zip via USB.")
       or Strings("Or drop a mod .zip onto the window."), x, top, w, "left")
   end
   top = top + self.hintFont:getHeight() + 12 * s
@@ -4144,10 +4176,11 @@ function RomImporter:_drawModsPanel(x, y, w, h, paged)
     local chipText = modStatusChip(m.status)
     local chipW = self.hintFont:getWidth(chipText) + 20 * s
     local delW = self.hintFont:getWidth("Delete") + 24 * s
-    local verW = self.hintFont:getWidth("Versions") + 24 * s
+    local verLabel = Strings("Versions")
+    local verW = self.hintFont:getWidth(verLabel) + 24 * s
     local hasGh = m.github and m.github ~= ""
     local info = hasGh and self:_modUpdateInfo(m.id) or nil
-    local updLabel = "Check for updates"
+    local updLabel = Strings("Check for updates")
     local updateKind = "neutral"
     -- checkLine: always on the mod row for github mods so the check result
     -- is visible without relying on the top-of-panel notice.
@@ -4316,7 +4349,7 @@ function RomImporter:_drawModsPanel(x, y, w, h, paged)
         })
         clipHit(urect, self.modUpdateRects)
         btnX = btnX + L.updW + btnGap
-        local vrect = self:_chipButton(btnX, btnY, "Versions", {
+        local vrect = self:_chipButton(btnX, btnY, Strings("Versions"), {
           w = L.verW, h = btnH, id = m.id, kind = "neutral",
         })
         clipHit(vrect, self.modVersionsRects)

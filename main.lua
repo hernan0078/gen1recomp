@@ -190,6 +190,34 @@ function love.load(args)
   local Boot = require("src.update.Boot")
   if Boot.run(args) then return end
 
+  -- Pick the app's language before anything draws.
+  --
+  -- A saved choice wins: someone who set the row meant it. Only when nothing
+  -- is saved does the device decide, so a phone in Spanish opens in Spanish
+  -- without the player hunting for a setting they cannot read yet.
+  --
+  -- love.system.getPreferredLanguage is this fork's own iOS addition (LOVE
+  -- ships no locale API), so everything here is probed rather than assumed
+  -- and desktop simply stays English.
+  do
+    local Strings = require("src.core.Strings")
+    local SaveData = require("src.core.SaveData")
+    local ok, opts = pcall(SaveData.loadOptions)
+    local chosen = ok and type(opts) == "table" and opts.language or nil
+    if not chosen then
+      local okL, code = pcall(function()
+        return love.system and love.system.getPreferredLanguage
+           and love.system.getPreferredLanguage()
+      end)
+      if okL and type(code) == "string" then
+        code = code:lower()
+        -- match the tag, not a substring, or "test" would read as Spanish
+        if code == "es" or code:match("^es[-_]") then chosen = "es" end
+      end
+    end
+    if chosen then Strings.setLanguage(chosen) end
+  end
+
   local savePath
   for i, a in ipairs(args or {}) do
     if a == "--editor" then

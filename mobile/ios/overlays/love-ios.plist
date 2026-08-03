@@ -2,6 +2,19 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Languages this app claims to speak.
+
+	     Locale.preferredLanguages inside an app is the INTERSECTION of the
+	     user's preferred languages and the ones the bundle declares. With
+	     nothing declared, iOS resolves everything to the development region,
+	     so a phone set to Spanish still reported "en" and the app opened in
+	     English. Declaring es is what makes the device's own preference
+	     visible to us. -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>es</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>

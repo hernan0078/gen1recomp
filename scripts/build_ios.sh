@@ -315,7 +315,8 @@ pack_game_love() {
     dirty="$(git -C "$ROOT" diff --name-only -- \
       main.lua conf.lua src data assets $mod_path \
       tools/save-editor tools/rom_manifest.json tools/rom_manifest_blue.json \
-      tools/rom_manifest_yellow.json)"
+      tools/rom_manifest_yellow.json tools/rom_manifest_red_es.json \
+      tools/rom_manifest_blue_es.json)"
     if [ -n "$dirty" ] && [ "$ALLOW_UNSTAGED" != true ]; then
       fail "unstaged changes would NOT be packaged (the payload comes from the
 git index). Stage them with 'git add' -- or pass --allow-unstaged to build the
@@ -326,19 +327,22 @@ $dirty"
     if ! git -C "$ROOT" diff --cached --quiet -- \
         main.lua conf.lua src data assets $mod_path \
         tools/save-editor tools/rom_manifest.json tools/rom_manifest_blue.json \
-        tools/rom_manifest_yellow.json; then
+        tools/rom_manifest_yellow.json tools/rom_manifest_red_es.json \
+      tools/rom_manifest_blue_es.json; then
       archive_tree="$(git -C "$ROOT" write-tree)"
     fi
     git -C "$ROOT" archive --format=zip --output="$staged_love" \
       "$archive_tree" main.lua conf.lua src data assets \
       $mod_path tools/save-editor \
       tools/rom_manifest.json tools/rom_manifest_blue.json \
-      tools/rom_manifest_yellow.json
+      tools/rom_manifest_yellow.json tools/rom_manifest_red_es.json \
+      tools/rom_manifest_blue_es.json
   else
     (cd "$ROOT" && zip -q -9 -r "$staged_love" \
       main.lua conf.lua src data assets $mod_path tools/save-editor \
       tools/rom_manifest.json tools/rom_manifest_blue.json \
-      tools/rom_manifest_yellow.json \
+      tools/rom_manifest_yellow.json tools/rom_manifest_red_es.json \
+      tools/rom_manifest_blue_es.json \
       -x '*.DS_Store' -x '*/.git/*' -x '*/.DS_Store' \
       -x 'data/generated/*' -x 'assets/generated/*')
   fi
@@ -385,7 +389,8 @@ $dirty"
 $missing"
   fi
   for manifest in tools/rom_manifest.json tools/rom_manifest_blue.json \
-                  tools/rom_manifest_yellow.json; do
+                  tools/rom_manifest_yellow.json tools/rom_manifest_red_es.json \
+      tools/rom_manifest_blue_es.json; do
     unzip -Z1 "$LOVE_FILE" | grep -x "$manifest" >/dev/null \
       || fail "game.love is missing $manifest"
   done

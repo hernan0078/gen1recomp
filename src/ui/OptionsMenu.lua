@@ -362,6 +362,18 @@ local function buildRows(game)
         require("src.core.TouchControls"):applyOptions(o)
         return true
       end },
+    -- The app's own language. Not the game's: what the player reads in
+    -- dialogue comes out of their cartridge, and this cannot reach it.
+    { id = "language", label = Strings("LANGUAGE"),
+      value = function(g)
+        return (g.save.options.language == "es") and "ESPANOL" or "ENGLISH"
+      end,
+      step = function(g)
+        local o = g.save.options
+        o.language = (o.language == "es") and "en" or "es"
+        Strings.setLanguage(o.language)
+        return true
+      end },
     -- Sits next to the pad it governs.
     { id = "touchAutoHide", label = Strings("AUTO HIDE PAD"),
       value = function(g)
