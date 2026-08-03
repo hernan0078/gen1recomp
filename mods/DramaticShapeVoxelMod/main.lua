@@ -413,7 +413,7 @@ end
 -- (see lib/Lang), so the change shows the next time the menu is built --
 -- which for the row the player is standing on is the very next frame.
 local langSetting = ModSetting.new("language", "LANGUAGE",
-                                   { "en", "es" }, { "ENGLISH", "ESPA~OL" })
+                                   { "en", "es" }, { "ENGLISH", "ESPANOL" })
 do
   -- row() routes its step through cycle(), so that is the method to wrap --
   -- and wrapping it covers the mod manager's page as well as the OPTIONS row.
@@ -1005,71 +1005,11 @@ OverworldBattle.install()
 -- file argues the whole arrangement.
 -- ------- language
 --
--- Registered here, at the bottom, because tracking captures each field's
--- ENGLISH value as it is at that moment: every module above has declared
--- its labels by now, and the pipelines have been registered, so what gets
--- captured is the real English text rather than a half-built table.
-do
-  local Pipelines = require("src.render.Pipelines")
-  Lang.trackList(Voxel.ANGLE_LABELS)
-  Lang.trackList(TiltShift.LABELS)
-  for _, entry in ipairs(SETTINGS) do Lang.trackSetting(entry[1]) end
-  local ok = pcall(function()
-    for _, entry in ipairs(Pipelines.list()) do
-      if entry.id == "voxel" or entry.id == "tiltshift" then
-        Lang.track(entry.def, "label")
-      end
-    end
-  end)
-  if not ok then
-    require("src.core.Logger").warn(
-      "DRAMATIC_SHAPE: pipeline labels not translatable")
-  end
-  -- and apply whatever the player left it on last session
-  Lang.set(langSetting:get())
-end
+-- Nothing to register: the label tables stay English and the rows hook
+-- translates them on the way to the menu (see lib/Lang). All that is needed
+-- at boot is to honour whatever language was left selected last session.
+Lang.set(langSetting:get())
 
--- ------- live tuning
---
--- The panel shows the same rows OPTIONS does and steps them the same way, so
--- there is one source of truth for what a setting is and one code path for
--- changing it. `when` is honoured here too: a row that OPTIONS would hide
--- (the first-person ones off the 1ST rung) is hidden here as well.
-LiveTune.provider = function()
-  local out = {}
-  local Pipelines = require("src.render.Pipelines")
-  -- the camera rung first: it is the one people step most
-  -- Both steppers are handed the live Game, because that is what makes the
-  -- change PERSIST: ModSetting:setIndex writes through game.save.options and
-  -- silently does not when it has none, and the pipeline level is stored by
-  -- syncOptions the same way the OPTIONS row stores it. Without this a value
-  -- tuned here would look right until the app was reopened.
-  local function game()
-    local ok, g = pcall(require, "src.core.Game")
-    return ok and g or nil
-  end
-  out[#out + 1] = {
-    label = "3D WORLD",
-    value = function() return Pipelines.levelLabel("voxel") end,
-    step = function(dir)
-      Pipelines.cycle("voxel", dir)
-      local g = game()
-      local opts = g and g.save and g.save.options
-      if opts then Pipelines.syncOptions(opts) end
-    end,
-  }
-  for _, entry in ipairs(SETTINGS) do
-    local setting = entry[1]
-    if setting ~= langSetting and (not entry.when or entry.when()) then
-      out[#out + 1] = {
-        label = setting.label,
-        value = function() return setting.labels[setting:read()] end,
-        step = function(dir) setting:cycle(game(), dir) end,
-      }
-    end
-  end
-  return out
-end
 FirstPerson.install()
 -- AFTER FirstPerson, deliberately. Each install wraps the previous handler,
 -- so the last one installed is asked first -- and first person claims any

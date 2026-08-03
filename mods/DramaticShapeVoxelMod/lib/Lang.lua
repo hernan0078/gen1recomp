@@ -14,11 +14,12 @@
 -- is registered with its ENGLISH original, so switching back is exact
 -- rather than a reverse lookup that could collide.
 --
--- NO ACCENTS. The font has no glyph for N-tilde or any accented vowel --
--- the sole exception in the whole charmap is the small e-acute of POKéMON.
--- Anything else renders as a blank, so the Spanish here is written without
--- them, with `~` standing in where a tilde is unavoidable (ESPA~OL). That
--- is a font limitation, not a spelling preference.
+-- NO ACCENTS, AND NO TILDE EITHER. The font has no glyph for N-tilde or any
+-- accented vowel -- the sole exception in the whole charmap is the small
+-- e-acute of POKéMON -- and it has no `~` to stand in for one either, which
+-- rendered "ESPA~OL" as "ESPA OL" with a hole in it. So the Spanish here is
+-- written in plain A-Z: ESPANOL, DISENO. A font limitation, not a spelling
+-- preference; adding the glyphs to the atlas would fix it properly.
 
 -- the mod namespace (see main.lua): V.require loads a sibling module
 local V = ...
@@ -70,7 +71,7 @@ Lang.ES = {
 
   -- the language row's own values, which never translate
   ["ENGLISH"]       = "ENGLISH",
-  ["ESPA~OL"]       = "ESPA~OL",
+  ["ESPANOL"]       = "ESPANOL",
 
   -- ------- the engine's own settings
   --
@@ -80,7 +81,7 @@ Lang.ES = {
   -- comes out of the ROM -- names, dialogue, items, places -- is deliberately
   -- untouched, because that text is the cartridge's, not ours.
   ["BATTLE ANIMATION"] = "ANIMACIONES",
-  ["BATTLE LAYOUT"]    = "DISE~O COMBATE",
+  ["BATTLE LAYOUT"]    = "DISENO COMBATE",
   ["BATTLE STYLE"]     = "ESTILO COMBATE",
   ["COLORS"]           = "COLORES",
   ["CONTROLS"]         = "CONTROLES",
@@ -116,30 +117,17 @@ Lang.ES = {
   ["CYCLE"]            = "CICLO",
 }
 
--- Registered fields: { table, key, english }. Registration captures the
--- English value at the moment of registering, which is why install() runs
--- after every module has declared its labels.
-local fields = {}
-
-function Lang.track(t, k)
-  if type(t) ~= "table" then return end
-  local en = t[k]
-  if type(en) ~= "string" then return end
-  fields[#fields + 1] = { t = t, k = k, en = en }
-end
-
--- Register every string in an array (a `labels` or ANGLE_LABELS table).
-function Lang.trackList(t)
-  if type(t) ~= "table" then return end
-  for i = 1, #t do Lang.track(t, i) end
-end
-
--- Both halves of a ModSetting: the row's label and its value ladder.
-function Lang.trackSetting(s)
-  if type(s) ~= "table" then return end
-  Lang.track(s, "label")
-  Lang.trackList(s.labels)
-end
+-- NOTE. There is deliberately no "rewrite the label tables" step here.
+--
+-- The first version had one, and it fought the display-time translation in
+-- the rows hook: the tables ended up holding Spanish, so switching back to
+-- English left every label Spanish (Lang.t has no key for "MUNDO 3D") while
+-- the values, which are read through functions, correctly turned English
+-- again. A menu half in each language.
+--
+-- So the tables always hold English and translation happens once, where the
+-- rows are handed to the menu. Switching languages then cannot leave
+-- anything behind, because nothing was ever changed to begin with.
 
 function Lang.t(s)
   if Lang.code ~= "es" or type(s) ~= "string" then return s end
@@ -157,15 +145,8 @@ end
 -- Rewrite every registered field for the current language. Cheap enough to
 -- call on every change: it is a few dozen table writes, and it runs when a
 -- player steps a menu row, not per frame.
-function Lang.apply()
-  for _, f in ipairs(fields) do
-    f.t[f.k] = Lang.t(f.en)
-  end
-end
-
 function Lang.set(code)
   Lang.code = (code == "es") and "es" or "en"
-  Lang.apply()
 end
 
 return Lang

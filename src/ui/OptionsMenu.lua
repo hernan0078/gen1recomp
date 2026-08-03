@@ -467,6 +467,30 @@ function OptionsMenu:update(dt)
       if input:wasPressed("a") then row.activate(self.game) end
     elseif row and row.step then
       changed = row.step(self.game, dir) and true or false
+      -- Rebuild the rows after a step.
+      --
+      -- A row's VALUE is a function, read every frame, but its LABEL is a
+      -- plain string baked in when the menu was built. Any setting that
+      -- changes what the other labels say -- a language row is the obvious
+      -- one -- therefore updated its values instantly and left every label
+      -- in the language the menu happened to be opened in.
+      --
+      -- Rebuilding is what opening the menu already does, and it costs a
+      -- table walk on a keypress, so the labels simply cannot go stale.
+      if changed then
+        local keep, scroll = self.index, self.scroll
+        local rebuilt = buildRows(self.game)
+        local hooked = Runtime.call("ui.options.rows", sameRows,
+                                    self.game, rebuilt)
+        if type(hooked) == "table" and #hooked > 0 then rebuilt = hooked end
+        -- Only adopt a rebuild that still has the row under the cursor;
+        -- a hook that suddenly returns fewer rows must not move the
+        -- selection out from under the player mid-press.
+        if rebuilt[keep] then
+          self.rows, rows = rebuilt, rebuilt
+          self.index, self.scroll = keep, scroll
+        end
+      end
     elseif input:wasPressed("a") then -- CANCEL
       self.game.stack:pop()
       if self.onCancel then self.onCancel() end
