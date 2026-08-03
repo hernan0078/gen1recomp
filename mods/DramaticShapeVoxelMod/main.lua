@@ -1008,7 +1008,24 @@ OverworldBattle.install()
 -- Nothing to register: the label tables stay English and the rows hook
 -- translates them on the way to the menu (see lib/Lang). All that is needed
 -- at boot is to honour whatever language was left selected last session.
-Lang.set(langSetting:get())
+do
+  -- Start in the phone's language, unless the player has chosen one.
+  --
+  -- A persisted value means someone opened the row and set it, and that
+  -- beats any guess. Only when nothing is persisted does the device get a
+  -- say -- and sync() moves the cached index WITHOUT writing it, so the
+  -- phone's language stays a default rather than silently becoming the
+  -- player's saved preference.
+  local persisted = nil
+  pcall(function()
+    persisted = V.mod and V.mod.options and V.mod.options:get("language")
+  end)
+  if persisted == nil then
+    local device = Lang.deviceLanguage()
+    if device then langSetting:sync(device) end
+  end
+  Lang.set(langSetting:get())
+end
 
 -- ------- live tuning
 --

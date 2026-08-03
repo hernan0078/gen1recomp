@@ -103,6 +103,23 @@ public final class GRPickerBridge: NSObject {
     // folder (Files app / Finder file sharing) into the LÖVE save directory,
     // where the importer's pending-file scan looks. Called on every
     // UIApplicationDidBecomeActive (see GRBootstrap.m).
+    // The language the phone is set to, as a bare code ("es", "en", "pt-BR").
+    //
+    // LOVE exposes no locale of any kind, so an app that wants to greet a
+    // Spanish speaker in Spanish has to ask UIKit itself. preferredLanguages
+    // is the ordered list the user set in Settings, not the region format --
+    // a phone in English with a Spanish region is a phone whose owner reads
+    // English, and this returns "en" for it, correctly.
+    //
+    // Answers "" when there is nothing to report; the caller treats that as
+    // "no opinion" and keeps its own default.
+    @objc public static func preferredLanguage() -> NSString {
+        guard let first = Locale.preferredLanguages.first, !first.isEmpty else {
+            return "" as NSString
+        }
+        return first as NSString
+    }
+
     @objc public static func sweepInbox() {
         let fm = FileManager.default
         guard let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first,

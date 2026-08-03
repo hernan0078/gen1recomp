@@ -7,12 +7,14 @@
 -- one, so this stays to the settings a player opens to configure the 3D
 -- mode.
 --
--- HOW IT SWITCHES. The engine builds its options rows fresh each time the
--- menu is opened: Pipelines.rows() re-reads `def.label`, and a ModSetting's
--- value is a function that reads `labels` live. So switching language means
--- rewriting those tables in place, which is what apply() does. Every field
--- is registered with its ENGLISH original, so switching back is exact
--- rather than a reverse lookup that could collide.
+-- HOW IT SWITCHES. The tables always hold English; translation happens once,
+-- in the rows hook, on the way to the menu. The engine rebuilds those rows
+-- whenever a setting is stepped, so both halves of a row answer in the
+-- language current at the moment they are read.
+--
+-- WHICH LANGUAGE IT STARTS IN. The phone's, if it has an opinion -- see
+-- deviceLanguage below. Once the player picks one by hand that choice is
+-- persisted and wins, because someone who set the row deliberately means it.
 --
 -- NO ACCENTS, AND NO TILDE EITHER. The font has no glyph for N-tilde or any
 -- accented vowel -- the sole exception in the whole charmap is the small
@@ -142,9 +144,26 @@ function Lang.t(s)
   return s
 end
 
--- Rewrite every registered field for the current language. Cheap enough to
--- call on every change: it is a few dozen table writes, and it runs when a
--- player steps a menu row, not per frame.
+-- What the phone is set to, as "en" / "es", or nil when there is no opinion
+-- to be had (desktop, Android, an iOS build without the bridge).
+--
+-- love.system.getPreferredLanguage is this fork's own addition -- LOVE ships
+-- no locale API -- so it is probed rather than assumed, and anything that is
+-- not clearly Spanish is left alone. A phone set to Portuguese should not get
+-- a Spanish menu just because the two are neighbours.
+function Lang.deviceLanguage()
+  local ok, code = pcall(function()
+    return love.system and love.system.getPreferredLanguage
+       and love.system.getPreferredLanguage()
+  end)
+  if not ok or type(code) ~= "string" or code == "" then return nil end
+  code = code:lower()
+  -- "es", "es-ES", "es-419" all mean Spanish; match the tag, not a substring,
+  -- or "aes" and "test" would qualify
+  if code == "es" or code:match("^es[-_]") then return "es" end
+  return "en"
+end
+
 function Lang.set(code)
   Lang.code = (code == "es") and "es" or "en"
 end

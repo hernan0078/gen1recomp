@@ -105,6 +105,44 @@ int w_createFile(lua_State *L)
 	return gr_callBridge(L, "GRPickerBridge", "presentExportWithName:saveDir:", name);
 }
 
+// love.system.getPreferredLanguage() -> "es", "en", "pt-BR", or nil.
+//
+// LOVE has no locale API at all, so an app that wants to open in the
+// language the phone is set to has to reach UIKit for it. Returns nil rather
+// than a guess when the bridge is absent, so callers can tell "no opinion"
+// from "English".
+int w_getPreferredLanguage(lua_State *L)
+{
+	Class cls = objc_getClass("GRPickerBridge");
+	if (cls == nullptr)
+	{
+		lua_pushnil(L);
+		return 1;
+	}
+	// wrap_System.cpp is compiled as C++, not Objective-C++, so no Foundation
+	// type may be named here -- `NSString` alone breaks the whole translation
+	// unit. objc_msgSend is a plain C entry point, and `id` comes from
+	// objc/runtime.h, so the string is fetched and then asked for its UTF8
+	// bytes entirely through the runtime.
+	typedef id (*GRObj)(Class, SEL);
+	id code = ((GRObj)objc_msgSend)(cls, sel_registerName("preferredLanguage"));
+	if (code == nullptr)
+	{
+		lua_pushnil(L);
+		return 1;
+	}
+	typedef const char *(*GRUTF8)(id, SEL);
+	const char *bytes = ((GRUTF8)objc_msgSend)(code,
+	                                           sel_registerName("UTF8String"));
+	if (bytes == nullptr || bytes[0] == '\0')
+	{
+		lua_pushnil(L);
+		return 1;
+	}
+	lua_pushstring(L, bytes);
+	return 1;
+}
+
 #endif // LOVE_IOS
 // ---------------------------------------------------------------------------
 
@@ -113,6 +151,7 @@ int w_createFile(lua_State *L)
 WRAP_REGISTRATION = """#ifdef LOVE_IOS
 	{ "pickFile", w_pickFile },
 	{ "createFile", w_createFile },
+	{ "getPreferredLanguage", w_getPreferredLanguage },
 #endif
 """
 
