@@ -440,6 +440,13 @@ local SETTINGS = {
   { FirstPerson.invertSetting,
     "Push down to look up, the flight-stick convention.",
     when = function() return FirstPerson.engaged() end },
+  -- The chase camera's framing. Only on 3RD, where they mean something.
+  { FirstPerson.distSetting,
+    "How far behind you the chase camera sits.",
+    when = function() return FirstPerson.chasing() end },
+  { FirstPerson.highSetting,
+    "How high above you the chase camera rides.",
+    when = function() return FirstPerson.chasing() end },
   { VoxelGrid.setting, "One-pixel wireframe along every voxel edge." },
   { WorldCurve.setting,
     "Bend the world down over the horizon, Animal Crossing style." },

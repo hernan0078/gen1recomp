@@ -41,7 +41,7 @@ local Voxel = {}
 -- a head should start from. Everything angle-derived (the sky's fade, the
 -- billboard lean the blend eases away) reads that 75 while the first-person
 -- rig owns the actual camera.
-Voxel.ANGLES_DEG = { 0, 35, 15, 35, 50, 75, 75 }
+Voxel.ANGLES_DEG = { 0, 35, 15, 35, 50, 75, 75, 75 }
 -- Named for what the player sees, not for the pitch in degrees, and short
 -- enough to fit.
 --
@@ -51,7 +51,7 @@ Voxel.ANGLES_DEG = { 0, 35, 15, 35, 50, 75, 75 }
 -- looked missing on a phone -- it was selectable the whole time, just drawn
 -- past the screen.
 Voxel.ANGLE_LABELS = { "OFF", "FULL 3D", "SLIGHT", "TILTED", "STEEP",
-                       "TABLE TOP", "1ST PERSON" }
+                       "TABLE TOP", "1ST PERSON", "3RD PERSON" }
 Voxel.MAX_LEVEL = #Voxel.ANGLES_DEG - 1
 
 -- the rung FULL sits on, so nothing has to hunt for it by label
@@ -63,6 +63,23 @@ end
 
 -- the rung the first-person camera sits on, likewise
 Voxel.FP_LEVEL = 6
+
+-- The chase rung: the first-person rig with the eye pulled back behind the
+-- player and lifted, still looking at them. It shares first person's
+-- steering, its blend and its placed camera -- the only difference is where
+-- the eye sits, which is why it lives on the same ladder rather than in a
+-- mode of its own.
+Voxel.TP_LEVEL = 7
+
+function Voxel.isThirdPerson(level)
+  return (level or Voxel.level) == Voxel.TP_LEVEL
+end
+
+-- Either of the two rigs that stand in the world, as opposed to orbiting
+-- above it. Everything that asks "is the camera down there" wants this.
+function Voxel.isEmbodied(level)
+  return Voxel.isFirstPerson(level) or Voxel.isThirdPerson(level)
+end
 
 function Voxel.isFirstPerson(level)
   return (level or Voxel.level) == Voxel.FP_LEVEL

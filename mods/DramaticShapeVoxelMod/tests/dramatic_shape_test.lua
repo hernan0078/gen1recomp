@@ -49,14 +49,14 @@ T.eq(defs._owners and defs._owners.voxel, "DRAMATIC_SHAPE",
 
 -- ------- the ladders the engine drives
 
-T.eq(#defs.voxel.levels, 7, "voxel exposes a seven-rung ladder")
+T.eq(#defs.voxel.levels, 8, "voxel exposes an eight-rung ladder")
 T.eq(defs.voxel.levels[1], "OFF", "rung 0 is OFF")
 T.eq(defs.voxel.levels[2], "FULL 3D",
   "FULL is the first rung after OFF -- the order those two get used in")
 T.eq(defs.voxel.levels[6], "TABLE TOP", "rung 5 is the 75-degree camera")
 T.eq(defs.voxel.levels[7], "1ST PERSON",
   "the top rung is the first-person camera, labelled as the experiment it is")
-T.eq(Pipelines.maxLevel("voxel"), 6, "the engine reads the ladder height")
+T.eq(Pipelines.maxLevel("voxel"), 7, "the engine reads the ladder height")
 T.eq(Pipelines.levelLabel("voxel", 3), "TILTED", "the engine reads the rung labels")
 
 -- ------- gating: inert until switched on, and inert without a GPU

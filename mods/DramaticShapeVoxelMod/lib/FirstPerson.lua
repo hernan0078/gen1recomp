@@ -116,6 +116,32 @@ FirstPerson.speedSetting = ModSetting.new("lookspeed", "LOOK SPEED",
 FirstPerson.invertSetting = ModSetting.new("lookinvert", "INVERT Y",
                                            { false, true }, { "OFF", "ON" })
 
+-- ------- the chase camera's two numbers
+--
+-- DISTANCE is how far behind the player the eye sits, in world pixels (a map
+-- tile is 16). CAM HEIGHT is how far above the head it is lifted. Together
+-- they are the whole difference between a shoulder cam and a helicopter, and
+-- neither has a right answer -- which is why they are rows rather than
+-- constants.
+--
+-- Defaults chosen to read as "behind the player" rather than "above them":
+-- three tiles back, one and a half up.
+FirstPerson.distSetting = ModSetting.new("chasedist", "DISTANCE",
+                                         { 32, 48, 64, 96, 128 },
+                                         { "1", "2", "3", "4", "5" }, 3)
+FirstPerson.highSetting = ModSetting.new("chasehigh", "CAM HEIGHT",
+                                         { 4, 12, 24, 40, 64 },
+                                         { "1", "2", "3", "4", "5" }, 3)
+
+local function chaseNumbers()
+  local d, h = 64, 24
+  local okD, vd = pcall(function() return FirstPerson.distSetting:get() end)
+  if okD and type(vd) == "number" then d = vd end
+  local okH, vh = pcall(function() return FirstPerson.highSetting:get() end)
+  if okH and type(vh) == "number" then h = vh end
+  return d, h
+end
+
 function FirstPerson.stickShown()
   local ok, v = pcall(function() return FirstPerson.stickSetting:get() end)
   if not ok or v == nil then return true end
@@ -174,7 +200,12 @@ end
 
 -- Whether the 1ST rung is selected and the 3D pass can carry it.
 function FirstPerson.engaged()
-  return Voxel.isFirstPerson(Voxel.level) and Voxel3D.available()
+  return Voxel.isEmbodied(Voxel.level) and Voxel3D.available()
+end
+
+-- The chase rung specifically, for the rows that only make sense there.
+function FirstPerson.chasing()
+  return Voxel.isThirdPerson(Voxel.level) and Voxel3D.available()
 end
 
 -- Whether first person should be READING the player's inputs right now:
@@ -217,7 +248,13 @@ end
 -- deep enough into the blend that the card would fill the lens from
 -- inside. The sun pass keeps drawing it either way -- a first-person
 -- player still throws a shadow on the ground ahead.
+--
+-- NEVER on the chase rung. Both rigs share this blend -- 3RD is 1ST with
+-- the eye pulled back -- so without this test the camera would frame a
+-- character it had just culled, and the player would follow a hole in the
+-- world. Seeing yourself is the entire point of a third-person camera.
 function FirstPerson.hidePlayer()
+  if Voxel.isThirdPerson(Voxel.level) then return false end
   return FirstPerson.cardBlend() > 0.9
 end
 
@@ -314,6 +351,40 @@ end
 -- answers -- the left stick's raw axes first (the engine quantises them to
 -- a d-pad; the raw pair is the analog truth), then a touch d-pad finger,
 -- then the held keys. Magnitude caps at 1.
+-- The compass facing implied by where the player is WALKING, rather than
+-- where the camera is pointed.
+--
+-- First person has no use for this: the head IS the facing, and the body is
+-- not on screen. A chase camera needs the opposite -- the camera sits
+-- directly behind whatever the character faces, so tying the facing to the
+-- camera makes the relative angle constant and the character wears his back
+-- sprite in every direction, whichever way you walk. Facing the direction of
+-- travel is what makes him turn to the side when you strafe and show his
+-- face when you walk toward the lens.
+--
+-- The move vector is in CAMERA space (mz forward, mx right), so it is
+-- rotated by the camera's yaw before being quantised to the grid's four.
+--
+-- nil while the stick is inside its deadzone: standing still should leave
+-- the character turned the way he last walked, not snap him somewhere.
+function FirstPerson.moveFacing()
+  local mx, mz = FirstPerson.moveVector()
+  if not mx then return nil end
+  if mx * mx + mz * mz < 1e-6 then return nil end
+  -- Asked of moveWorld rather than re-derived from the yaw. The first
+  -- version worked the bearing out with its own atan2 and had the strafe
+  -- axis backwards: the character faced left while walking right, and
+  -- because the facing is also what ledge hops, boulder pushes and edge
+  -- exits are taken FROM, pressing right tried the left-hand interaction.
+  -- One source of truth for "which way is this input going" means the
+  -- facing cannot disagree with the motion.
+  local wx, wz = FirstPerson.moveWorld(mx, mz)
+  if math.abs(wx) > math.abs(wz) then
+    return wx > 0 and "right" or "left"
+  end
+  return wz > 0 and "down" or "up"
+end
+
 function FirstPerson.moveVector()
   local ok, Game = pcall(require, "src.core.Game")
   local input = ok and Game.input or nil
@@ -499,6 +570,22 @@ function FirstPerson.frame(me, cx, cy, vw, vh)
   local fpFocus = { head[1] + lx * FirstPerson.FOCUS_DIST,
                     head[2] + ly * FirstPerson.FOCUS_DIST,
                     head[3] + lz * FirstPerson.FOCUS_DIST }
+
+  -- CHASE: the same head and the same look direction, with the eye walked
+  -- BACKWARDS along that direction and lifted. Deriving it from the look
+  -- vector rather than from yaw alone is what makes the camera swing under
+  -- the player when you look down and rise when you look up, instead of
+  -- staying pinned at one height while the view tilts past it.
+  --
+  -- The focus stays on the head, so the player is always the thing framed.
+  if Voxel.isThirdPerson(Voxel.level) then
+    local dist, lift = chaseNumbers()
+    local target = head        -- the player's own head: what we frame
+    head = { target[1] - lx * dist,
+             target[2] - ly * dist + lift,
+             target[3] - lz * dist }
+    fpFocus = target
+  end
 
   local oEye, oFocus, oFov, oUp = orbitRig(cx, cy, vh)
   local function mix(p, q)

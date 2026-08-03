@@ -234,7 +234,13 @@ function FreeMove.tick(state)
 
   -- the head is the facing: what A talks to, what the sun's card shows,
   -- which way a bonk points
-  p.facing = FirstPerson.compassFacing()
+  local Voxel_ = V.require("VoxelState")
+  if Voxel_.isThirdPerson(Voxel_.level) then
+    -- chase camera: face where you WALK, and keep that facing while idle
+    p.facing = FirstPerson.moveFacing() or p.facing
+  else
+    p.facing = FirstPerson.compassFacing()
+  end
 
   -- HORDE MODE takes both of these away for as long as it runs: there is
   -- no pausing (START), and nobody stops to read a sign with the horde
@@ -316,7 +322,13 @@ function FreeMove.tick(state)
       return
     end
     -- the push handlers may have turned the facing; the head still rules
+    local Voxel_ = V.require("VoxelState")
+  if Voxel_.isThirdPerson(Voxel_.level) then
+    -- chase camera: face where you WALK, and keep that facing while idle
+    p.facing = FirstPerson.moveFacing() or p.facing
+  else
     p.facing = FirstPerson.compassFacing()
+  end
   end
 end
 
