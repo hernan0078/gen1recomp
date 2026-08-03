@@ -512,10 +512,15 @@ local SETTINGS = {
     when = function() return VR.enabled() end, full = true },
   -- Last on purpose: every assertion and every reader that indexes this
   -- table by position is describing the rows that were here before it.
+  -- `full` on both of these: FULL is a preset for the LOOK, and it takes the
+  -- look's knobs off the menu while it is selected. Neither of these is one.
+  -- Losing the language row that way is how a player ends up with a menu in
+  -- a language they cannot read and no visible way back.
   { LiveTune.setting,
-    "The floating handle that opens the live-tuning panel over the world." },
+    "The floating handle that opens the live-tuning panel over the world.",
+    full = true },
   { langSetting, "The language of this mod's own settings. The game's own "
-    .. "text comes from your ROM and is not affected." },
+    .. "text comes from your ROM and is not affected.", full = true },
 }
 
 local schema = {}

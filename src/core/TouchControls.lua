@@ -177,6 +177,10 @@ end
 function TouchControls:applyOptions(opts)
   local cfg = TouchControls.normalizeConfig(opts and opts.touchControls)
   self.enabled = cfg.enabled
+  -- Default ON: a player who has just plugged in a controller is telling you
+  -- which input they want, and leaving the pad over the screen until they
+  -- happen to press a button is clutter with no purpose.
+  self.autoHide = not (opts and opts.touchAutoHide == false)
   self.positions = cfg.positions
   self.layoutW, self.layoutH = nil, nil
   if not self.enabled then
@@ -395,13 +399,28 @@ function TouchControls:noteGamepad()
   self:reset()
 end
 
+-- A controller has been connected. Hiding on CONNECT rather than only on
+-- first use: plugging one in is already an unambiguous statement of intent,
+-- and until now the pad sat over the screen until a button happened to be
+-- pressed. Honours the preference, and never resurrects a pad the player
+-- disabled outright.
+function TouchControls:joystickadded()
+  if self.autoHide == false then return end
+  if not self.active or self.enabled == false then return end
+  self.controllerHidden = true
+  self:reset()
+end
+
 -- last controller unplugged: show the overlay again immediately instead
 -- of requiring a blind first tap
 function TouchControls:joystickremoved()
   self:reset()
   if love.joystick and love.joystick.getJoystickCount
      and love.joystick.getJoystickCount() == 0 then
-    self.controllerHidden = false
+    -- With auto-hide off the player is driving this by hand, so a disconnect
+    -- must not override them. With it on, a controller running out of battery
+    -- has to give the pad back -- there is no other way to play.
+    if self.autoHide ~= false then self.controllerHidden = false end
   end
 end
 

@@ -327,6 +327,7 @@ local function buildRows(game)
     -- POKEPORT_TOUCH), so the row costs a non-mobile install nothing.
     { id = "touchControls", label = Strings("TOUCH PAD"),
       value = function(g)
+        if OptionsMenu._padDisarm then return Strings("SURE? AGAIN") end
         local tc = g.save.options.touchControls
         local on = not (type(tc) == "table" and tc.enabled == false)
         return on and Strings("ON") or Strings("OFF")
@@ -335,9 +336,41 @@ local function buildRows(game)
         local o = g.save.options
         local tc = type(o.touchControls) == "table" and o.touchControls or {}
         local on = not (tc.enabled == false)
+        -- Turning the pad OFF with no controller attached removes the only
+        -- way to press anything -- including this row, to turn it back on.
+        -- The player's own way out was force-quitting the app. So the first
+        -- press arms, the second commits, and the row says so in between.
+        --
+        -- Only when there is nothing else to play with: with a controller
+        -- connected, switching the pad off is an ordinary preference and
+        -- being asked twice would just be nagging.
+        if on and not OptionsMenu._padDisarm then
+          local pads = 0
+          pcall(function()
+            pads = (love.joystick and love.joystick.getJoystickCount
+                    and love.joystick.getJoystickCount()) or 0
+          end)
+          if pads == 0 then
+            OptionsMenu._padDisarm = true
+            return true
+          end
+        end
+        OptionsMenu._padDisarm = nil
         tc.enabled = not on
         -- keep any saved positions when toggling
         o.touchControls = tc
+        require("src.core.TouchControls"):applyOptions(o)
+        return true
+      end },
+    -- Sits next to the pad it governs.
+    { id = "touchAutoHide", label = Strings("AUTO HIDE PAD"),
+      value = function(g)
+        return (g.save.options.touchAutoHide == false)
+          and Strings("OFF") or Strings("ON")
+      end,
+      step = function(g)
+        local o = g.save.options
+        o.touchAutoHide = (o.touchAutoHide == false)
         require("src.core.TouchControls"):applyOptions(o)
         return true
       end },
@@ -401,6 +434,9 @@ end
 
 function OptionsMenu.new(game, opts)
   opts = opts or {}
+  -- A half-answered "are you sure" must not survive the menu being closed
+  -- and reopened, or the row greets the next visitor mid-question.
+  OptionsMenu._padDisarm = nil
   local rows = buildRows(game)
   local hooked = Runtime.call("ui.options.rows", sameRows, game, rows)
   if type(hooked) == "table" then
