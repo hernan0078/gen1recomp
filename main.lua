@@ -184,11 +184,6 @@ local function bootGame(version)
 end
 
 function love.load(args)
-  -- Before anything can shell out (update check, mod index, ROM picker),
-  -- claim one hidden console on Windows so those children inherit it instead
-  -- of each flashing their own cmd.exe window (#606).  No-op elsewhere.
-  require("src.core.HostShell").hideHostConsole()
-
   -- Self-updater boot shell: a fused build may mount and chainload a newer
   -- downloaded payload here.  True means it took over, so we must stop.  A
   -- dev / source checkout no-ops (see src/update/Boot.lua).
@@ -445,8 +440,7 @@ function love.touchmoved(id, x, y, dx, dy, pressure)
   end
   if Importer then return end
   -- A two-finger pinch on open screen drives the zoom. It consumes the move
-  -- so the same fingers do not also drag the first-person view: pinching to
-  -- frame a shot should not spin the camera while you do it.
+  -- so the same fingers do not also drag the first-person view.
   if require("src.core.Pinch").moved(id, x, y) then return end
   Game:touchmoved(id, x, y)
 end
@@ -472,31 +466,14 @@ function love.wheelmoved(x, y)
   Game:wheelmoved(x, y)
 end
 
-function love.mousepressed(x, y, button, istouch)
+function love.mousepressed(x, y, button)
   if TouchEditor then
     -- Android primary touch already arrived via love.touchpressed; a second
     -- mouse path would double-fire Done / begin a second drag.
     if love.system.getOS() == "Android" then return end
     return TouchEditor.mousepressed(x, y, button)
   end
-  if Importer then
-    -- The same double-fire TouchEditor guards against, which the launcher was
-    -- missing: love.touchpressed above forwards the primary touch to the
-    -- Importer on Android, and LÖVE ALSO synthesizes a mouse press for that
-    -- same touch, so one tap ran every launcher button twice.  On Import that
-    -- meant two choose() calls and two stacked SAF picker activities: the
-    -- player picked their ROM, the top picker closed, and the second was still
-    -- underneath asking for it again, which is the "import the file twice"
-    -- in #553.  Filtering on istouch keeps a real mouse (DeX, a Chromebook, a
-    -- USB mouse) working, which an Android-wide return would have broken.
-    --
-    -- ANDROID ONLY, and the OS test is load bearing: love.touchpressed above
-    -- returns early on iOS and never forwards, so there the synthesized mouse
-    -- press is the ONLY event the launcher gets.  Filtering istouch on both
-    -- killed every tap on iOS outright.
-    if istouch and love.system.getOS() == "Android" then return end
-    return Importer:mousepressed(x, y, button)
-  end
+  if Importer then return Importer:mousepressed(x, y, button) end
   if editorMode and EditorApp.mousepressed then
     return EditorApp.mousepressed(x, y, button)
   end
