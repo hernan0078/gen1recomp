@@ -119,27 +119,69 @@ function Editor.draw()
   col(PAL.bgTop, 0.85)
   love.graphics.circle("fill", ww * 0.5, wh * 0.15, math.max(ww, wh) * 0.55)
 
+  -- The Dynamic Island, the notch and the home indicator sit OVER the
+  -- window: LOVE hands back the usable rectangle, and nothing in this UI was
+  -- asking for it, so the top bar was drawn underneath the status bar and
+  -- the title was half-eaten by the island. Landscape has side insets for
+  -- the same reason, which is why left and right are read too.
+  --
+  -- Answers the full window on anything without insets, so desktop and
+  -- older devices lay out exactly as before.
+  local insetT, insetL, insetR = 0, 0, 0
+  if love.window and love.window.getSafeArea then
+    local ok, ax, ay, aw = pcall(love.window.getSafeArea)
+    if ok and type(aw) == "number" and aw > 0 then
+      insetT = math.max(0, ay or 0)
+      insetL = math.max(0, ax or 0)
+      insetR = math.max(0, ww - ((ax or 0) + aw))
+    end
+  end
+  local usableW = ww - insetL - insetR
+
   local pad = 18 * s
   local barH = 56 * s
   local btnH = 40 * s
-  local btnW = 100 * s
+  -- Two 100-unit buttons on a phone held upright are 60% of the whole width,
+  -- which is what left the title nowhere to go. Cap them as a share of the
+  -- window so a narrow screen gets narrower buttons instead of an unreadable
+  -- title; at desktop widths the cap never binds and nothing changes.
+  local btnW = math.min(100 * s, usableW * 0.26)
 
   -- top bar
   col(PAL.card, 0.92)
-  love.graphics.rectangle("fill", 0, 0, ww, barH + pad)
+  love.graphics.rectangle("fill", 0, 0, ww, insetT + barH + pad)
   col(PAL.stroke, 0.35)
   love.graphics.setLineWidth(1)
-  love.graphics.line(0, barH + pad, ww, barH + pad)
+  love.graphics.line(0, insetT + barH + pad, ww, insetT + barH + pad)
 
-  love.graphics.setFont(Editor.fonts.title)
-  col(PAL.white)
-  love.graphics.print("Touch Controls", pad, pad + 4 * s)
-
-  -- Done / Reset
-  local done = { x = ww - pad - btnW, y = pad + (barH - btnH) / 2,
+  -- Done / Reset first: the title is fitted to whatever they leave, rather
+  -- than drawn at a fixed size and hoped for.
+  local done = { x = ww - insetR - pad - btnW,
+                 y = insetT + pad + (barH - btnH) / 2,
                  w = btnW, h = btnH }
   local reset = { x = done.x - 10 * s - btnW, y = done.y, w = btnW, h = btnH }
   Editor.rects.done, Editor.rects.reset = done, reset
+
+  -- The title used to be drawn first, at a fixed position, and on a phone
+  -- Reset landed on top of it -- the word read "Touch Co...ntrols".
+  love.graphics.setFont(Editor.fonts.title)
+  col(PAL.white)
+  -- Prefer a SHORTER title over a shrunken one: "Controls" at full size reads
+  -- as a heading, "Touch Controls" at 54% reads as a mistake. Scaling is the
+  -- last resort, once even the short form will not fit.
+  local room = reset.x - (insetL + pad) - 12 * s
+  local title = "Touch Controls"
+  local tw = Editor.fonts.title:getWidth(title)
+  if tw > room then
+    title = "Controls"
+    tw = Editor.fonts.title:getWidth(title)
+  end
+  local ts = (tw > room and room > 0) and (room / tw) or 1
+  -- centred on the line it used to sit on, so an unscaled title lands
+  -- exactly where it always did
+  local th = Editor.fonts.title:getHeight()
+  love.graphics.print(title, insetL + pad,
+                      insetT + pad + 4 * s + (th - th * ts) / 2, 0, ts, ts)
 
   local function chromeBtn(r, label, fill)
     col(fill, 0.9)
@@ -156,9 +198,9 @@ function Editor.draw()
   chromeBtn(done, "Done", PAL.green)
 
   -- enable toggle card
-  local cardY = barH + pad + 14 * s
+  local cardY = insetT + barH + pad + 14 * s
   local cardH = 64 * s
-  local cardX, cardW = pad, ww - 2 * pad
+  local cardX, cardW = insetL + pad, usableW - 2 * pad
   col(PAL.card, 0.88)
   roundRect("fill", cardX, cardY, cardW, cardH, 12 * s)
   col(PAL.stroke, 0.4)
@@ -190,7 +232,8 @@ function Editor.draw()
   local hint = on
     and "Drag each button to reposition. Layout is saved when you tap Done."
     or "Controls are hidden in-game. Enable them to show and edit the layout."
-  love.graphics.printf(hint, pad, cardY + cardH + 12 * s, ww - 2 * pad, "left")
+  love.graphics.printf(hint, insetL + pad, cardY + cardH + 12 * s,
+                       usableW - 2 * pad, "left")
 
   -- the overlay itself (preview mode; dimmed when disabled)
   TouchControls:draw()
