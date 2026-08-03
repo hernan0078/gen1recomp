@@ -1010,6 +1010,52 @@ OverworldBattle.install()
 -- at boot is to honour whatever language was left selected last session.
 Lang.set(langSetting:get())
 
+-- ------- live tuning
+--
+-- The panel shows the same rows OPTIONS does and steps them the same way, so
+-- there is one source of truth for what a setting is and one code path for
+-- changing it. `when` is honoured here too, so a row OPTIONS would hide is
+-- hidden here as well.
+--
+-- Without this the handle draws nothing at all: LiveTune has no rows of its
+-- own, so an empty provider means an empty panel and the draw returns before
+-- anything reaches the screen.
+LiveTune.provider = function()
+  local out = {}
+  local Pipelines = require("src.render.Pipelines")
+  -- Both steppers are handed the live Game, because that is what makes the
+  -- change PERSIST: ModSetting:setIndex writes through game.save.options and
+  -- silently does not when it has none, and the pipeline level is stored by
+  -- syncOptions the same way the OPTIONS row stores it.
+  local function game()
+    local ok, g = pcall(require, "src.core.Game")
+    return ok and g or nil
+  end
+  -- the camera rung first: it is the one people step most
+  out[#out + 1] = {
+    label = "3D WORLD",
+    value = function() return Pipelines.levelLabel("voxel") end,
+    step = function(dir)
+      Pipelines.cycle("voxel", dir)
+      local g = game()
+      local opts = g and g.save and g.save.options
+      if opts then Pipelines.syncOptions(opts) end
+    end,
+  }
+  for _, entry in ipairs(SETTINGS) do
+    local setting = entry[1]
+    if setting ~= langSetting and setting ~= LiveTune.setting
+       and (not entry.when or entry.when()) then
+      out[#out + 1] = {
+        label = setting.label,
+        value = function() return setting.labels[setting:read()] end,
+        step = function(dir) setting:cycle(game(), dir) end,
+      }
+    end
+  end
+  return out
+end
+
 FirstPerson.install()
 -- AFTER FirstPerson, deliberately. Each install wraps the previous handler,
 -- so the last one installed is asked first -- and first person claims any
