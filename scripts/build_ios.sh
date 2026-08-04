@@ -316,7 +316,7 @@ pack_game_love() {
       main.lua conf.lua src data assets $mod_path \
       tools/save-editor tools/rom_manifest.json tools/rom_manifest_blue.json \
       tools/rom_manifest_yellow.json tools/rom_manifest_red_es.json \
-      tools/rom_manifest_blue_es.json)"
+      tools/rom_manifest_blue_es.json tools/rom_manifest_yellow_es.json)"
     if [ -n "$dirty" ] && [ "$ALLOW_UNSTAGED" != true ]; then
       fail "unstaged changes would NOT be packaged (the payload comes from the
 git index). Stage them with 'git add' -- or pass --allow-unstaged to build the
@@ -328,7 +328,7 @@ $dirty"
         main.lua conf.lua src data assets $mod_path \
         tools/save-editor tools/rom_manifest.json tools/rom_manifest_blue.json \
         tools/rom_manifest_yellow.json tools/rom_manifest_red_es.json \
-      tools/rom_manifest_blue_es.json; then
+      tools/rom_manifest_blue_es.json tools/rom_manifest_yellow_es.json; then
       archive_tree="$(git -C "$ROOT" write-tree)"
     fi
     git -C "$ROOT" archive --format=zip --output="$staged_love" \
@@ -336,13 +336,13 @@ $dirty"
       $mod_path tools/save-editor \
       tools/rom_manifest.json tools/rom_manifest_blue.json \
       tools/rom_manifest_yellow.json tools/rom_manifest_red_es.json \
-      tools/rom_manifest_blue_es.json
+      tools/rom_manifest_blue_es.json tools/rom_manifest_yellow_es.json
   else
     (cd "$ROOT" && zip -q -9 -r "$staged_love" \
       main.lua conf.lua src data assets $mod_path tools/save-editor \
       tools/rom_manifest.json tools/rom_manifest_blue.json \
       tools/rom_manifest_yellow.json tools/rom_manifest_red_es.json \
-      tools/rom_manifest_blue_es.json \
+      tools/rom_manifest_blue_es.json tools/rom_manifest_yellow_es.json \
       -x '*.DS_Store' -x '*/.git/*' -x '*/.DS_Store' \
       -x 'data/generated/*' -x 'assets/generated/*')
   fi
@@ -390,7 +390,7 @@ $missing"
   fi
   for manifest in tools/rom_manifest.json tools/rom_manifest_blue.json \
                   tools/rom_manifest_yellow.json tools/rom_manifest_red_es.json \
-      tools/rom_manifest_blue_es.json; do
+      tools/rom_manifest_blue_es.json tools/rom_manifest_yellow_es.json; do
     unzip -Z1 "$LOVE_FILE" | grep -x "$manifest" >/dev/null \
       || fail "game.love is missing $manifest"
   done
@@ -639,15 +639,34 @@ package_ipa() {
 install_to_device() {
   local app="$1"
   local line udid
-  line="$(xcrun devicectl list devices 2>/dev/null \
-    | grep -E 'iPhone|iPad' | grep -v 'Watch' | head -1 || true)"
-  udid="$(printf '%s' "$line" \
-    | grep -Eo '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}' \
-    | head -1 || true)"
+  # Filter on the Reality column: `devicectl list devices` lists simulators
+  # too, and their Model column says "iPhone ..." just like a real handset,
+  # so matching on the model picks whichever happens to be listed first and
+  # then hands a simulator UDID to `devicectl device install`.  Only rows
+  # marked `physical` are installable.  IOS_DEVICE_UDID overrides the choice
+  # when more than one phone is plugged in.
+  if [ -n "${IOS_DEVICE_UDID:-}" ]; then
+    udid="$IOS_DEVICE_UDID"
+    line="$(xcrun devicectl list devices 2>/dev/null | grep -F "$udid" || true)"
+  else
+    line="$(xcrun devicectl list devices 2>/dev/null \
+      | grep -E '[[:space:]]physical([[:space:]]|$)' \
+      | grep -E 'iPhone|iPad' | grep -v 'Watch' | head -1 || true)"
+    udid="$(printf '%s' "$line" \
+      | grep -Eo '[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}' \
+      | head -1 || true)"
+  fi
   if [ -z "$udid" ]; then
-    fail "no iPhone/iPad found.
+    fail "no physical iPhone/iPad found.
   Plug the phone in with a cable, unlock it, tap 'Trust This Computer'
-  if asked, then re-run: scripts/build_ios.sh --device --install"
+  if asked, then re-run: scripts/build_ios.sh --device --install
+  (Set IOS_DEVICE_UDID=... to choose between several attached devices.)"
+  fi
+  local extra
+  extra="$(xcrun devicectl list devices 2>/dev/null \
+    | grep -E '[[:space:]]physical([[:space:]]|$)' | grep -cE 'iPhone|iPad' || true)"
+  if [ "${extra:-0}" -gt 1 ] && [ -z "${IOS_DEVICE_UDID:-}" ]; then
+    warn "$extra devices attached; installing to the first. Set IOS_DEVICE_UDID to pick."
   fi
   say "installing onto: $(printf '%s' "$line" | sed 's/  .*//') ($udid)"
   if xcrun devicectl device install app --device "$udid" "$app"; then

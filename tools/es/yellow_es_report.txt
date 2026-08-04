@@ -1,0 +1,58 @@
+symbol recovery: 4711/4711 symbols resolved (100.00%)
+  ROMs are 72.1% byte-identical across 64 banks
+  content    778
+  table      189
+  dexwalk    149
+  blockwalk    33
+  farptr    2490
+  farscan     15
+  dwptr     1037
+  pincer       2
+  shape        1
+  carry        1
+  aligned     14
+  gap          2
+  conflicts resolved by confidence: 23
+  dropped for going backwards in their bank: 2
+
+Pokedex measurements are metric (3 bytes, not 4) -- labelled AL / PE
+
+inline {bank, address} entries rewritten: 252 of 252
+character codes the translation reassigned: 31
+  $BA  à
+  $BB  è
+  $BC  é
+  $BD  ù
+  $BE  À
+  $BF  Á
+  $C0  Ä
+  $C1  Ö
+  $C2  Ü
+  $C3  ä
+  $C4  ö
+  $C5  ü
+  $C6  È
+  $C7  É
+  $C8  Ì
+  $C9  Í
+  $CA  Ñ
+  $CB  Ò
+  $CC  Ó
+  $CD  Ù
+  $CE  Ú
+  $CF  á
+  $D0  ì
+  $D1  í
+  $D2  ñ
+  $D3  ò
+  $D4  ó
+  $D5  ú
+  $D8  Ü
+  $E4  ¿
+  $E5  ¡
+  1 glyphs changed but could not be named -- run tools/es/charmap.py --render to read them
+
+text splices rebuilt from the translated streams: 181
+
+
+no manifest section refers to an unresolved symbol.

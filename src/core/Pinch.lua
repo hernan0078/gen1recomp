@@ -84,6 +84,31 @@ local function currentOffset()
   return (ok and off) or 0
 end
 
+-- Stand aside when a render pipeline owns the camera.
+--
+-- The 3D mod's CamControl takes a pinch too, and aims it at whichever of its
+-- cameras is live: the boom behind the player on 3RD, the lens of a staged
+-- battle, or the engine's survey zoom on an orbit rung. That is strictly
+-- more than this module can do -- it only knows about survey zoom -- and we
+-- run FIRST, in love.touchmoved, before Game:touchmoved ever reaches the
+-- mod. Whoever is more capable should get the gesture, so on any 3D rung
+-- this one steps back and lets the pipeline have it.
+--
+-- Plain 2D play has no pipeline and no CamControl, and keeps pinch-to-zoom.
+local function pipelineOwnsCamera()
+  local ok, active = pcall(function()
+    local Pipelines = require("src.render.Pipelines")
+    for _, entry in ipairs(Pipelines.list()) do
+      if entry.def and entry.def.drawWorld
+         and (Pipelines.level(entry.id) or 0) > 0 then
+        return true
+      end
+    end
+    return false
+  end)
+  return ok and active or false
+end
+
 function Pinch.pressed(id, x, y)
   live[id] = { x = x, y = y, pad = onPad(x, y) }
   gesture = nil
@@ -99,6 +124,7 @@ function Pinch.pressed(id, x, y)
 end
 
 function Pinch.moved(id, x, y)
+  if pipelineOwnsCamera() then return false end
   local p = live[id]
   if not p then return false end
   p.x, p.y = x, y
