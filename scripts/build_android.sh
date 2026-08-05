@@ -210,7 +210,7 @@ pack_game_love() {
     main.lua conf.lua src libs data assets tools/save-editor \
     tools/rom_manifest.json tools/rom_manifest_blue.json \
     tools/rom_manifest_yellow.json \
-    tools/rom_manifest_red_es.json tools/rom_manifest_blue_es.json \
+    tools/rom_manifest_red_es.json tools/rom_manifest_blue_es.json tools/rom_manifest_yellow_es.json \
     -x '*.DS_Store' -x '*/.git/*' -x '*/.DS_Store' \
     -x 'data/generated/*' -x 'assets/generated/*')
   if unzip -Z1 "$LOVE_FILE" \

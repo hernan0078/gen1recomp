@@ -63,6 +63,12 @@ GameVersion.VERSIONS = {
     roms = {
       { locale = "us", sha1 = "cc7d03262ebfaf2f06772c1a480c7d9d5f4a38e1",
         manifest = "tools/rom_manifest_yellow.json" },
+      -- Edicion Amarilla.  There is no shift-matching disassembly for the
+      -- Spanish Yellow, so unlike Red/Blue this manifest is recovered from
+      -- the cartridge itself -- see tools/es/README.md for the method, the
+      -- verification, and what it costs in confidence.
+      { locale = "es", sha1 = "1dc242039218fba50928d1afb66b70565b6b9daf",
+        manifest = "tools/rom_manifest_yellow_es.json" },
     },
     cachePrefix = "yellow/",  -- yellow/data/generated, yellow/assets/generated
     saveSuffix = "_yellow",   -- save_yellow.lua / .bak / .tmp
@@ -70,13 +76,11 @@ GameVersion.VERSIONS = {
 }
 
 -- Recognized clean dumps we cannot import yet, so the launcher can say why
--- instead of implying the file is a bad dump.  Spanish EUR Red/Blue derive
--- their manifests from the shift-matching einstein95/pokered-es
--- disassembly; no such disassembly exists for the Spanish Yellow.
-GameVersion.UNSUPPORTED = {
-  ["1dc242039218fba50928d1afb66b70565b6b9daf"] =
-    "Pokemon Amarillo (Spanish EUR Yellow)",
-}
+-- instead of implying the file is a bad dump.  Empty at the moment: Spanish
+-- EUR Red/Blue take their addresses from the shift-matching
+-- einstein95/pokered-es disassembly, and Spanish Yellow -- which has no such
+-- disassembly -- derives them from the cartridge instead.
+GameVersion.UNSUPPORTED = {}
 
 -- Launcher column order.
 GameVersion.ORDER = { "red", "blue", "yellow" }

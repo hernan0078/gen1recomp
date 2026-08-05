@@ -71,7 +71,7 @@ rm -f "$LOVE_FILE"
   main.lua conf.lua src libs data assets tools/save-editor \
   tools/rom_manifest.json tools/rom_manifest_blue.json \
   tools/rom_manifest_yellow.json \
-  tools/rom_manifest_red_es.json tools/rom_manifest_blue_es.json \
+  tools/rom_manifest_red_es.json tools/rom_manifest_blue_es.json tools/rom_manifest_yellow_es.json \
   -x '*.DS_Store' 'data/generated/*' 'assets/generated/*')
 # Materialize the listing once and grep the file: piping unzip straight into
 # grep -q under `set -o pipefail` SIGPIPEs unzip when grep exits early on a
@@ -93,7 +93,7 @@ for required in tools/save-editor/App.lua tools/save-editor/Kit.lua \
                 tools/rom_manifest.json tools/rom_manifest_blue.json \
                 tools/rom_manifest_yellow.json \
                 tools/rom_manifest_red_es.json \
-                tools/rom_manifest_blue_es.json; do
+                tools/rom_manifest_blue_es.json tools/rom_manifest_yellow_es.json; do
   grep -qxF "$required" "$LOVE_LISTING" \
     || fail "game.love is missing $required"
 done
