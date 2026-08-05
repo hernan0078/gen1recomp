@@ -293,7 +293,11 @@ pack_game_love() {
   mkdir -p "$RESOURCES_DIR"
   rm -f "$LOVE_FILE"
   local pack_tmp staged_love mod_path
-  mod_path="mods/DramaticShapeVoxelMod"
+  # DramaticShapeVoxelMod is the built-in 3D renderer; spanish_ui is the
+  # LANGUAGE mod that translates the engine's own menus and battle text --
+  # the part no ROM can supply, since gen1recomp authors those strings in
+  # Lua.  Both stay disableable in the mod manager.
+  mod_path="mods/DramaticShapeVoxelMod mods/spanish_ui"
   [ "$WITH_MOD" = true ] || mod_path=""
   pack_tmp="$(mktemp -d /private/tmp/voxeltrail-love.XXXXXX)"
   staged_love="$pack_tmp/game.love"
@@ -361,6 +365,9 @@ $dirty"
     unzip -Z1 "$LOVE_FILE" \
       | grep -x 'mods/DramaticShapeVoxelMod/manifest.json' >/dev/null \
       || fail "game.love is missing DramaticShapeVoxelMod"
+    unzip -Z1 "$LOVE_FILE" \
+      | grep -x 'mods/spanish_ui/lang/strings.lua' >/dev/null \
+      || fail "game.love is missing the spanish_ui catalogs"
   else
     # The point of --no-mods is that nothing third-party ships.  Assert it,
     # rather than trusting that dropping the pathspec was enough.
