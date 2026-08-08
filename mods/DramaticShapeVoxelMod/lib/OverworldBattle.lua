@@ -430,10 +430,6 @@ end
 -- not nest.
 local session = nil
 
-local function isIOS()
-  return love.system and love.system.getOS and love.system.getOS() == "iOS"
-end
-
 local function game()
   return require("src.core.Game")
 end
@@ -1447,21 +1443,25 @@ function OverworldBattle.snapHUDs(battle, shot)
   local enemy, player = OverworldBattle.hudLive(battle, slide)
   local live = {}
 
-  if not isIOS() then
-
-    if enemy then live.enemy = rects.enemy end
-
-    if player then live.player = rects.player end
-
-  end
-  -- The text box's frost panel normally goes into this same world-canvas pass.
-  -- On iOS that panel is mirrored upward by the Canvas-to-Canvas path, creating
-  -- the large ghost rectangle behind the Pokemon. Keep the box border/text but
-  -- skip only this frosted backing on iOS.
-  if not isIOS() then
-    for key, rect in pairs(OverworldBattle.textRects(battle)) do
-      live[key] = toWorld(rect, shot)
-    end
+  -- ------- NOTE (VoxelTrail): the iOS special cases here are upstream's and
+  -- they are removed.
+  --
+  -- 1.7.2 carried a workaround built on "iOS presents this Canvas-to-Canvas
+  -- HUD texture upside down": the two HUD bands were drawn with a negative Y
+  -- scale, the enemy band's destination was mirrored about the frame, and
+  -- every frost panel was skipped to hide a ghost rectangle the flip left
+  -- behind. On this build the canvas is NOT flipped, so all that did was
+  -- mirror the HUD: PIKACHU, the HP numbers and L100 came out backwards while
+  -- FIGHT / ITEM / RUN, which never went through this path, read correctly.
+  --
+  -- Whatever the contributor was seeing is not what this fork's liblove does,
+  -- and a workaround for a flip that is not happening is just a flip. So iOS
+  -- takes the same path as every other platform, and the frost panels come
+  -- back with it.
+  if enemy then live.enemy = rects.enemy end
+  if player then live.player = rects.player end
+  for key, rect in pairs(OverworldBattle.textRects(battle)) do
+    live[key] = toWorld(rect, shot)
   end
   local layer = OverworldBattle.hudTexture(battle, slide)
   if not layer then return false end
@@ -1478,40 +1478,8 @@ function OverworldBattle.snapHUDs(battle, shot)
       local quad = g.newQuad(band[1], band[2], band[3], band[4],
                              BattleScene.GB_W, BattleScene.GB_H)
       local x = bandX[side] + band[1] * shot.scale
-
-      local targetY = shot.ly + band[2] * shot.scale
-
-
-
-      if isIOS() then
-
-        -- Keep the player's HUD exactly where it currently appears on the
-
-        -- right. Only the enemy band needs its mirrored destination corrected.
-
-        local y = targetY
-
-        if side == "enemy" then
-
-          y = shot.ph - targetY - band[4] * shot.scale
-
-        end
-
-
-
-        -- iOS presents this Canvas-to-Canvas HUD texture upside down.
-
-        g.draw(layer, quad, x, y, 0,
-
-               shot.scale, -shot.scale, 0, band[4])
-
-      else
-
-        g.draw(layer, quad, x, targetY, 0,
-
-               shot.scale, shot.scale)
-
-      end
+      local y = shot.ly + band[2] * shot.scale
+      g.draw(layer, quad, x, y, 0, shot.scale, shot.scale)
     end
   end)
   if prevCanvas then g.setCanvas(prevCanvas) else g.setCanvas() end

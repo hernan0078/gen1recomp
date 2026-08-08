@@ -46,6 +46,15 @@ public final class GRPickerBridge: NSObject {
             types = [.zip]
         case "sav":
             destName = "picked_save.sav"
+        // A Pokémon Stadium cartridge, for the voxel mod's battle models.
+        // Its own name on purpose: the mod watches picked_stadium.z64, and
+        // an N64 ROM landing on picked_rom.gb would be swept up by the Game
+        // Boy importer, deleted, and reported as a broken cartridge.
+        case "stadium":
+            destName = "picked_stadium.z64"
+            for ext in ["z64", "n64", "v64"] {
+                if let t = UTType(filenameExtension: ext) { types.append(t) }
+            }
         default:
             destName = "picked_rom.gb"
             for ext in ["gb", "gbc"] {

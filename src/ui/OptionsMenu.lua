@@ -519,8 +519,12 @@ function OptionsMenu:update(dt)
 end
 
 function OptionsMenu:draw()
+  -- Through Strings, like every other label here.  CANCEL is appended AFTER
+  -- the mod rows hook (see above), so a mod's own translation pass never sees
+  -- it -- which is how the exit row ended up as the one English word under a
+  -- Spanish menu.
   OptionRows.draw(self.game, self.rows, self.index, self.scroll or 0,
-                  "CANCEL", #self.rows + 1)
+                  Strings("CANCEL"), #self.rows + 1)
 end
 
 return OptionsMenu

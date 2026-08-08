@@ -79,6 +79,19 @@ Lang.ES = {
   -- ROM is looking for that word, not for a translation of it.
   ["RENDER DIST"]   = "DISTANCIA",
   ["STADIUM ROM"]   = "ROM STADIUM",
+  -- what the STADIUM ROM row says it will do, and how the build reports back
+  ["IMPORT"]        = "IMPORTAR",
+  ["WHERE?"]        = "DONDE?",
+  ["READY"]         = "LISTO",
+  ["BUILDING"]      = "CREANDO",
+  -- and the extraction screen it puts up
+  ["STADIUM EXTRACTION"]  = "EXTRAYENDO STADIUM",
+  ["COULD NOT BUILD"]     = "NO SE PUDO CREAR",
+  ["STADIUM IS OFF"]      = "STADIUM DESACTIVADO",
+  ["PRESS ANY KEY"]       = "PULSA UNA TECLA",
+  ["NOT US 1.0 --"]       = "NO ES US 1.0 --",
+  ["MODELS MAY BE WRONG"] = "LOS MODELOS PUEDEN FALLAR",
+  ["PUT STADIUM US 1.0 HERE:"] = "PON STADIUM US 1.0 AQUI:",
   ["WIDER"]         = "MAS LEJOS",
   ["WIDEST"]        = "MAXIMO",
   ["LOW"]           = "BAJO",

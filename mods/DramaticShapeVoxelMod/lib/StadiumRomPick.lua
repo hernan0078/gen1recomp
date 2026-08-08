@@ -117,7 +117,30 @@ end
 -- lacked was being TOLD that -- the row vanished, and the folder's absolute
 -- path was only ever written to a console no phone shows. That is what the
 -- note below is for.
+-- iOS DOES have a picker, and it is the bridge this fork ships.
+--
+-- The note above describes the trap exactly: the bridge maps a kind to a
+-- filename, and an unknown kind falls through to picked_rom.gb, where a 32 MB
+-- N64 ROM is deleted by the Game Boy importer and reported as a broken
+-- cartridge. So the bridge was taught the kind first -- "stadium" ->
+-- picked_stadium.z64, which is the filename poll() below is already watching
+-- (mobile/ios/native/GRPickerBridge.swift). With that in place the rest of
+-- this module needs nothing: the pick lands in the save directory and poll
+-- consumes it, exactly as the Android path was written to expect.
+--
+-- io is irrelevant here -- the bridge copies the file itself and the game
+-- reads it back through love.filesystem -- so this is tested on its own,
+-- before the shell tests that the desktop dialogs need.
+local function nativePick()
+  local ok, fn = pcall(function() return love.system.pickFile end)
+  if not (ok and fn) then return false end
+  return osName() == "iOS"
+end
+
+StadiumRomPick.nativePick = nativePick
+
 function StadiumRomPick.canDialog()
+  if nativePick() then return true end
   if not (haveShell() and haveFiles()) then return false end
   local p = osName()
   return p == "Windows" or p == "OS X" or p == "Linux"
@@ -212,6 +235,15 @@ function StadiumRomPick.import(game)
         StadiumInstall.romHintFile()))
     end
     return false
+  end
+
+  -- The iOS picker is a modal SHEET, not a blocking call: it returns at once
+  -- and the file appears some frames later, so there is nothing to read on
+  -- the next line and no loading screen to push yet. poll() is what notices
+  -- the answer -- the same route the Android path was built for.
+  if nativePick() then
+    local ok, shown = pcall(love.system.pickFile, "stadium")
+    return (ok and shown) and true or false
   end
 
   local path = StadiumRomPick.choose()

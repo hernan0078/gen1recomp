@@ -1014,6 +1014,43 @@ function RomImporter:chooseMod()
   if path then self:_installMod(path) end
 end
 
+-- "Import Stadium ROM": the Pokemon Stadium cartridge the voxel mod builds its
+-- battle models out of.
+--
+-- HERE, and not only in the mod's own OPTIONS row, because of where the work
+-- happens: the build is a one-time job over 151 models that wants to run before
+-- the player is in a battle, and the launcher is the screen they are already on
+-- when they are setting the game up.  The row stays where it is for anyone who
+-- gets there later.
+--
+-- This side knows nothing about the mod, and does not need to.  The picker
+-- copies the pick into the save directory as picked_stadium.z64 (see
+-- GRPickerBridge), the mod watches that filename every frame, and if the mod
+-- is not installed the file is simply never claimed.  So the button is only
+-- offered when the mod IS there -- a button that drops a 32 MB file nothing
+-- will read is worse than no button.
+function RomImporter:chooseStadium()
+  if self.workState == "working" then return end
+  if not (self.android and love.system.pickFile) then return end
+  if love.system.pickFile("stadium") then
+    self.pickPending = true
+    self.pickTimer = 0
+    self.modNotice = { ok = true, text = Strings(
+      "Stadium ROM imported - the models build when you start the game.") }
+  else
+    self.modNotice = { ok = false,
+      text = Strings("Could not open the file picker.") }
+  end
+end
+
+-- Is the 3D voxel mod installed?  Gates the Stadium button above.
+function RomImporter:_hasVoxelMod()
+  for _, m in ipairs(self.mods or {}) do
+    if m.id == "DRAMATIC_SHAPE" then return true end
+  end
+  return false
+end
+
 -- Which game a dropped .sav imports into: a .sav has no version signature of
 -- its own, so it lands on the active game tab.  When a non-game tab (mods) is
 -- showing, default to red -- the always-present first game -- rather than
@@ -1669,6 +1706,7 @@ function RomImporter:_resetFrameRects()
   self.modRects = nil
   self.modDeleteRects = nil
   self.modImportRect = nil
+  self.stadiumImportRect = nil
   -- Same rule as the toggles above, and it started to bite once FIND MODS gave
   -- the mods tab a neighbour: these two were rebuilt by the mods panel but
   -- never cleared, so switching tabs left the last mod row's Update / Versions
@@ -2739,6 +2777,9 @@ function RomImporter:mousepressed(x, y, button)
   -- a drag-scroll (Android, with no pointer polling, toggles on press).
   if inside(self.modImportRect, x, y) then
     self:chooseMod(); return
+  end
+  if inside(self.stadiumImportRect, x, y) then
+    self:chooseStadium(); return
   end
   for _, r in ipairs(self.modDeleteRects or {}) do
     if inside(r, x, y) then
@@ -4133,6 +4174,21 @@ function RomImporter:_drawModsPanel(x, y, w, h, paged)
       or Strings("Or drop a mod .zip onto the window."), x, top, w, "left")
   end
   top = top + self.hintFont:getHeight() + 12 * s
+
+  -- Stadium cartridge import, under the notice and above the mod list, and
+  -- only where there is both a picker to open and a mod to claim the file
+  -- (see chooseStadium).  Full width: it is a second import ACTION rather than
+  -- a header control, and pairing it with the header's own button would make
+  -- two things of very different rarity look equally routine.
+  if self.android and love.system.pickFile and self:_hasVoxelMod() then
+    local sLabel = Strings("Import Stadium ROM")
+    local sH = math.max(38 * s, self.saveBtnFont:getHeight() + 20 * s)
+    self.stadiumImportRect =
+      self:_glassyButton(x, top, w, sH, sLabel, self.saveBtnFont, true)
+    top = top + sH + 12 * s
+  else
+    self.stadiumImportRect = nil
+  end
 
   local listH = math.max(0, (y + h) - top)
 

@@ -142,4 +142,12 @@ return {
   ["SURE? AGAIN"]          = "SEGURO? OTRA VEZ",
   ["%d of 3 ready"]        = "%d de 3 listos",
   ["%d badges - %s - %d caught"] = "%d medallas - %s - %d capturados",
+  -- the OPTIONS exit row, appended after the mod rows hook (see OptionsMenu)
+  ["CANCEL"]               = "CANCELAR",
+  -- importing a Pokemon Stadium cartridge from the launcher
+  ["Import Stadium ROM"]   = "Importar ROM de Stadium",
+  ["Stadium ROM imported - the models build when you start the game."]
+    = "ROM de Stadium importada - los modelos se crean al empezar la partida.",
+  ["Could not open the file picker."]
+    = "No se pudo abrir el selector de archivos.",
 }

@@ -59,9 +59,14 @@ local function text(str, x, y)
   F.draw(str, math.floor(x), math.floor(y))
 end
 
+-- Every heading this screen draws goes through here, so this is the one seam
+-- the Spanish needs (lib/Lang.lua). Safe on anything it has no key for --
+-- which is the point, because the ROM PATH is drawn through this file too and
+-- a path must survive untranslated. Lang.t only replaces exact matches.
 local function centred(str, y)
   local F = font()
   if not F then return end
+  str = V.require("Lang").t(str)
   text(str, (W - F.width(str)) / 2, y)
 end
 
@@ -270,7 +275,9 @@ function StadiumScreen:draw()
     -- whole pixel rows out of every glyph and the last line came out as
     -- mush. Nine rows of twenty characters is 180, which is longer than any
     -- real save path, so nothing has to be shrunk to fit.
-    local lead = wrapped(self.note.lead or "", 2)
+    -- translated BEFORE the wrap: afterwards it is line fragments, and a
+    -- fragment matches no key
+    local lead = wrapped(V.require("Lang").t(self.note.lead or ""), 2)
     for i, line in ipairs(lead) do centred(line, 30 + (i - 1) * 10) end
     local y = 30 + #lead * 10 + 6
     for i, line in ipairs(wrapped(self.note.body or "", 9)) do
