@@ -131,10 +131,25 @@ end
 -- io is irrelevant here -- the bridge copies the file itself and the game
 -- reads it back through love.filesystem -- so this is tested on its own,
 -- before the shell tests that the desktop dialogs need.
+-- AND IT ASKS FIRST. The host is queried for the kinds its picker knows,
+-- rather than the kind being assumed present because a pickFile exists.
+--
+-- That is not defensiveness for its own sake: a build that predates the
+-- stadium kind cannot say "I don't know that one" -- the old bridge treated
+-- ANY unrecognised kind as a Game Boy ROM and wrote picked_rom.gb, which the
+-- engine's importer then deletes and reports as a broken cartridge. So
+-- guessing wrong costs the player their file. pickFileKinds is nil on every
+-- host that has not got the kind, and this falls back to the folder note --
+-- what it did before any picker existed.
 local function nativePick()
-  local ok, fn = pcall(function() return love.system.pickFile end)
+  if osName() ~= "iOS" then return false end
+  local ok, fn = pcall(function() return love.system.pickFileKinds end)
   if not (ok and fn) then return false end
-  return osName() == "iOS"
+  local okK, kinds = pcall(fn)
+  if not (okK and type(kinds) == "string") then return false end
+  -- matched as a whole item, or "stadium" would also be found inside a
+  -- longer kind some later build adds
+  return (("," .. kinds .. ","):find(",stadium,", 1, true)) and true or false
 end
 
 StadiumRomPick.nativePick = nativePick

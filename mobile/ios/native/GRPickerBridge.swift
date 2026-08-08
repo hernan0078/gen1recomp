@@ -55,11 +55,20 @@ public final class GRPickerBridge: NSObject {
             for ext in ["z64", "n64", "v64"] {
                 if let t = UTType(filenameExtension: ext) { types.append(t) }
             }
-        default:
+        case "rom", "":
             destName = "picked_rom.gb"
             for ext in ["gb", "gbc"] {
                 if let t = UTType(filenameExtension: ext) { types.append(t) }
             }
+        // An unknown kind is REFUSED, not treated as a Game Boy ROM.
+        //
+        // It used to fall through to picked_rom.gb, which is the filename the
+        // Game Boy importer watches -- so a caller asking for a kind this
+        // build had never heard of got its file deleted and reported as a
+        // broken cartridge. Refusing lets the caller find out (pickFile
+        // returns false) and offer its own fallback instead.
+        default:
+            return false
         }
         // .gb/.gbc/.sav resolve to dynamic UTTypes on most devices; offering
         // .data as well keeps every real file selectable. The importer
@@ -122,6 +131,22 @@ public final class GRPickerBridge: NSObject {
     //
     // Answers "" when there is nothing to report; the caller treats that as
     // "no opinion" and keeps its own default.
+    // Which kinds presentPicker above understands, comma separated.
+    //
+    // So a CALLER can ask before it calls. A mod that wants a kind this build
+    // predates cannot tell the difference between "refused" and "the picker
+    // failed to open", and the cost of guessing wrong used to be the user's
+    // ROM (see the default case above). Asking first turns that into a
+    // fallback the caller chooses -- the voxel mod's Stadium import shows its
+    // "put the file here" note instead, which is what it did before any
+    // picker existed.
+    //
+    // Kept next to the switch it describes, because the two drifting apart is
+    // the only way this can lie.
+    @objc public static func supportedPickerKinds() -> NSString {
+        return "rom,mod,sav,stadium" as NSString
+    }
+
     @objc public static func preferredLanguage() -> NSString {
         guard let first = Locale.preferredLanguages.first, !first.isEmpty else {
             return "" as NSString

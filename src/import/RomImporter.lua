@@ -1014,6 +1014,24 @@ function RomImporter:chooseMod()
   if path then self:_installMod(path) end
 end
 
+-- Can this build's picker actually take a Stadium cartridge?
+--
+-- ASKED, never assumed.  `self.android` is true on Android AND iOS, and only
+-- the iOS bridge knows the "stadium" kind: Android's picker maps anything it
+-- does not recognise onto picked_rom.gb, which the ROM importer then deletes
+-- and reports as a broken cartridge.  So a button gated on "is this mobile"
+-- would eat an Android player's 32 MB file.  pickFileKinds is the host saying
+-- what it understands, and it is nil everywhere that understands nothing.
+local function canPickStadium()
+  if not (love.system and love.system.pickFile
+          and love.system.pickFileKinds) then
+    return false
+  end
+  local ok, kinds = pcall(love.system.pickFileKinds)
+  if not (ok and type(kinds) == "string") then return false end
+  return (("," .. kinds .. ","):find(",stadium,", 1, true)) and true or false
+end
+
 -- "Import Stadium ROM": the Pokemon Stadium cartridge the voxel mod builds its
 -- battle models out of.
 --
@@ -1031,7 +1049,7 @@ end
 -- will read is worse than no button.
 function RomImporter:chooseStadium()
   if self.workState == "working" then return end
-  if not (self.android and love.system.pickFile) then return end
+  if not canPickStadium() then return end
   if love.system.pickFile("stadium") then
     self.pickPending = true
     self.pickTimer = 0
@@ -4180,7 +4198,7 @@ function RomImporter:_drawModsPanel(x, y, w, h, paged)
   -- (see chooseStadium).  Full width: it is a second import ACTION rather than
   -- a header control, and pairing it with the header's own button would make
   -- two things of very different rarity look equally routine.
-  if self.android and love.system.pickFile and self:_hasVoxelMod() then
+  if canPickStadium() and self:_hasVoxelMod() then
     local sLabel = Strings("Import Stadium ROM")
     local sH = math.max(38 * s, self.saveBtnFont:getHeight() + 20 * s)
     self.stadiumImportRect =
