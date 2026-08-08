@@ -27,6 +27,8 @@ local DayNight = V.require("DayNight")
 local FirstPerson = V.require("FirstPerson")
 local BattleBillboard = V.require("BattleBillboard")
 local Pokedex = V.require("Pokedex")
+local Diorama = V.require("Diorama")
+local ViewBox = V.require("ViewBox")
 local PaletteFX = require("src.render.PaletteFX")
 local Map = require("src.world.Map")
 
@@ -622,10 +624,12 @@ local function drawCast(state, posed, atlasFor)
                  ShadowMap.snug(caster))
   end)
   for _, nb in ipairs(state.neighbors or {}) do
-    eachFigure(nb.map, nb.ox, nb.oy, function(mesh, model, caster)
-      Voxel3D.draw(mesh, atlasFor(nb.map), model, figPull,
-                   ShadowMap.snug(caster))
-    end)
+    if ViewBox.showsMap(nb) then
+      eachFigure(nb.map, nb.ox, nb.oy, function(mesh, model, caster)
+        Voxel3D.draw(mesh, atlasFor(nb.map), model, figPull,
+                     ShadowMap.snug(caster))
+      end)
+    end
   end
   -- and the seams are back on for the terrain art that follows: grass and
   -- flowers are the world's own drawing, not people
@@ -769,6 +773,11 @@ local function shadowSignature(terrain, nbMesh, posed, cx, cy, vw, vh)
   -- and the sprite cards swap frames as it circles them, so a turn on the
   -- spot re-fits and redraws exactly like a camera move ("" outside 1ST)
   put(FirstPerson.signature())
+  -- and the window box, because WHICH neighbours went into the light is a
+  -- function of it (see ViewBox.signature): opening the row out brings a
+  -- map back inside the cut, and a sun map recorded without it would leave
+  -- that map standing in its own unlit shadow
+  put(ViewBox.signature())
   put(tostring(terrain))
   for i = 1, #nbMesh do put(tostring(nbMesh[i])) end
   for _, p in ipairs(posed) do
@@ -802,9 +811,16 @@ local function castShadows(state, terrain, nbMesh, posed, cx, cy, vw, vh,
   if not ShadowMap.begin(cx, cy, vw, vh) then return end
 
   ShadowMap.draw(terrain, atlasFor(state.map), nil)
+  -- The window box's coarse cut, here and at every neighbour loop below
+  -- (lib/ViewBox): a connected map lying entirely outside this frame's
+  -- viewport has nothing inside it that could reach the picture, so it is
+  -- not submitted at all. True for every map whenever there is no box,
+  -- which is every frame the row is OFF and every headset frame.
   for i, nb in ipairs(state.neighbors or {}) do
-    ShadowMap.draw(nbMesh[i], atlasFor(nb.map),
-                   Mat4.translate(nb.ox, 0, nb.oy))
+    if ViewBox.showsMap(nb) then
+      ShadowMap.draw(nbMesh[i], atlasFor(nb.map),
+                     Mat4.translate(nb.ox, 0, nb.oy))
+    end
   end
   -- The water surface, which the terrain mesh no longer carries (it is its
   -- own reflective pass now -- see Water). The sun still has to see it, or
@@ -812,8 +828,10 @@ local function castShadows(state, terrain, nbMesh, posed, cx, cy, vw, vh,
   -- far plane answers for the surface a shoreline tree's shadow falls on.
   ShadowMap.draw(water, atlasFor(state.map), nil)
   for i, nb in ipairs(state.neighbors or {}) do
-    ShadowMap.draw(nbWater and nbWater[i], atlasFor(nb.map),
-                   Mat4.translate(nb.ox, 0, nb.oy))
+    if ViewBox.showsMap(nb) then
+      ShadowMap.draw(nbWater and nbWater[i], atlasFor(nb.map),
+                     Mat4.translate(nb.ox, 0, nb.oy))
+    end
   end
   -- flower billboards live outside the terrain mesh (they draw after the
   -- characters, pulled -- see render), but the sun still sees them: a
@@ -824,8 +842,10 @@ local function castShadows(state, terrain, nbMesh, posed, cx, cy, vw, vh,
   ShadowMap.draw(ChunkMesher.flowers(state.map), atlasFor(state.map),
                  ShadowMap.snug(nil))
   for _, nb in ipairs(state.neighbors or {}) do
-    ShadowMap.draw(ChunkMesher.flowers(nb.map), atlasFor(nb.map),
-                   ShadowMap.snug(Mat4.translate(nb.ox, 0, nb.oy)))
+    if ViewBox.showsMap(nb) then
+      ShadowMap.draw(ChunkMesher.flowers(nb.map), atlasFor(nb.map),
+                     ShadowMap.snug(Mat4.translate(nb.ox, 0, nb.oy)))
+    end
   end
   -- From here down it is the CAST, marked as such in the map (see
   -- ShadowMap.sprites) so water can decline them: everything the world casts
@@ -838,9 +858,11 @@ local function castShadows(state, terrain, nbMesh, posed, cx, cy, vw, vh,
     ShadowMap.draw(mesh, atlasFor(state.map), ShadowMap.snug(caster))
   end)
   for _, nb in ipairs(state.neighbors or {}) do
-    eachFigure(nb.map, nb.ox, nb.oy, function(mesh, _, caster)
-      ShadowMap.draw(mesh, atlasFor(nb.map), ShadowMap.snug(caster))
-    end)
+    if ViewBox.showsMap(nb) then
+      eachFigure(nb.map, nb.ox, nb.oy, function(mesh, _, caster)
+        ShadowMap.draw(mesh, atlasFor(nb.map), ShadowMap.snug(caster))
+      end)
+    end
   end
   for _, p in ipairs(posed) do
     local def = p.sprite.def
@@ -865,6 +887,16 @@ local function castShadows(state, terrain, nbMesh, posed, cx, cy, vw, vh,
     ShadowMap.draw(BattleBillboard.mesh(), card.tex, ShadowMap.snug(card.model))
   end
   ShadowMap.sprites(false)
+  -- and the STADIUM models, outside the sprite flag and un-snugged, for
+  -- the reasons the flat battle pass gives (BattleScene.castShadows):
+  -- these are geometry, not cut-outs
+  pcall(function()
+    local stageArena, stageY = V.require("OverworldBattle").stage()
+    if stageArena and stageArena.discs then
+      V.require("StadiumStage").cast(ShadowMap, stageArena, stageY or 0)
+    end
+    V.require("Stadium").cast(ShadowMap)
+  end)
 
   ShadowMap.finish(sig)
 end
@@ -904,6 +936,20 @@ function VoxelScene.render(state, w, h, vw, vh, paletteFor, eyes)
   Voxel3D.glassNight = outdoor and DayNight.windowLight() or 0
   local g = VoxelScene.glintStep(glint, cx, cy)
   Voxel3D.glassPhase, Voxel3D.glassGlint = g.phase, g.amp
+  -- and the map's atmosphere, if it has one (see ForestAtmos): the haze
+  -- the scene shader folds every surface into, in the hour's colour.
+  -- nil for every map without an entry -- a clear day, exactly as before.
+  local ForestAtmos = V.require("ForestAtmos")
+  local atmos = ForestAtmos.frame(state.map)
+  Voxel3D.fog = atmos and atmos.fog or nil
+  -- and the DIORAMA modes' viewport and chroma key (lib/Diorama, driven by
+  -- the headset -- lib/VR sets them for the length of one frame). Both are
+  -- put back to nil at the end of this function, so no other pass in the
+  -- frame -- the battle screen's own arena shot above all -- can inherit a
+  -- cut world or a green background.
+  local dioFrame = (eyes and Diorama.on) and true or false
+  Voxel3D.cull = dioFrame and Diorama.cull or nil
+  Voxel3D.keyColor = dioFrame and Diorama.keyColor() or nil
 
   local function atlasFor(map)
     return TerrainAtlas.forMap(map, modeColors(paletteFor, map))
@@ -933,6 +979,25 @@ function VoxelScene.render(state, w, h, vw, vh, paletteFor, eyes)
     if fpRig then cx, cy = fpCx, fpCy end
   elseif eyes.cx then
     cx, cy = eyes.cx, eyes.cy
+  end
+
+  -- and the ORBIT RUNGS' own viewport (lib/ViewBox): the flat screen's
+  -- answer to the same question the diorama's box asks -- the map cut to
+  -- the window that frames it, so a tilted world reads as a model with
+  -- sides rather than a map running off every edge. Flat frames only: a
+  -- headset's cut is Diorama's above, and the two must never both be live.
+  --
+  -- After the first-person block, so the box is centred on the camera
+  -- actually in charge and opens out with a dive into a head rather than
+  -- vanishing on the frame the rung changed.
+  --
+  -- Ahead of castShadows, deliberately: the sun draws the same neighbours
+  -- the eye does (both ask ViewBox.showsMap), so a map skipped out here is
+  -- skipped out there and nothing is left casting a shadow it cannot own.
+  if not eyes then
+    Voxel3D.cull = ViewBox.frame(cx, cy, vw, vh)
+  else
+    ViewBox.stop()
   end
 
   -- A staged fight, seen by the VR eyes: the flat screen draws the battle
@@ -965,9 +1030,14 @@ function VoxelScene.render(state, w, h, vw, vh, paletteFor, eyes)
   local function drawScene()
 
   Voxel3D.draw(terrain, atlasFor(state.map), nil)
+  -- the window box's coarse cut, exactly as the sun pass took it: the same
+  -- test on the same maps, so the light and the eye can never disagree
+  -- about which neighbours are in this frame (see ViewBox.showsMap)
   for i, nb in ipairs(state.neighbors or {}) do
-    Voxel3D.draw(nbMesh[i], atlasFor(nb.map),
-                 Mat4.translate(nb.ox, 0, nb.oy))
+    if ViewBox.showsMap(nb) then
+      Voxel3D.draw(nbMesh[i], atlasFor(nb.map),
+                   Mat4.translate(nb.ox, 0, nb.oy))
+    end
   end
 
   -- Without a shadow map (headless, or a driver that could not make the
@@ -999,7 +1069,7 @@ function VoxelScene.render(state, w, h, vw, vh, paletteFor, eyes)
     waterDraws[#waterDraws + 1] = { water, atlasFor(state.map), nil }
   end
   for i, nb in ipairs(state.neighbors or {}) do
-    if nbWater and nbWater[i] then
+    if nbWater and nbWater[i] and ViewBox.showsMap(nb) then
       waterDraws[#waterDraws + 1] = { nbWater[i], atlasFor(nb.map),
                                       Mat4.translate(nb.ox, 0, nb.oy) }
     end
@@ -1072,6 +1142,24 @@ function VoxelScene.render(state, w, h, vw, vh, paletteFor, eyes)
         Voxel3D.draw(BattleBillboard.mesh(), card.tex, card.model,
                      BattleBillboard.PULL)
       end
+      -- and, on the STADIUM rungs, the models -- the same skinned meshes the
+      -- flat pass and the sun already used this frame, drawn again through
+      -- THIS eye. Unlike the cards there is nothing per-eye about them: a
+      -- model faces its opponent, not the viewer, so both eyes see the same
+      -- pose from their own seats, which is what makes it read as solid.
+      --
+      -- On a disc rung the platforms come with them. In a headset the world is
+      -- still drawn -- the player is standing IN it, which is the whole point
+      -- of the headset, so the rung's "no map" does not apply here -- and the
+      -- discs then read as a stage set down on the ground, which is what they
+      -- are.
+      pcall(function()
+        local stageArena, stageY = V.require("OverworldBattle").stage()
+        if stageArena and stageArena.discs then
+          V.require("StadiumStage").draw(stageArena, stageY or 0)
+        end
+        V.require("Stadium").draw(BattleBillboard.PULL)
+      end)
       if battleTex.flash then Voxel3D.flatten(nil) end
       -- and the MOVE ANIMATIONS, standing on the same arena: the
       -- engine's own effects layer on the plane through both cells
@@ -1100,8 +1188,10 @@ function VoxelScene.render(state, w, h, vw, vh, paletteFor, eyes)
   local pull = VoxelScene.pull(lean)
   Voxel3D.draw(ChunkMesher.grass(state.map), atlasFor(state.map), nil, pull)
   for _, nb in ipairs(state.neighbors or {}) do
-    Voxel3D.draw(ChunkMesher.grass(nb.map), atlasFor(nb.map),
-                 Mat4.translate(nb.ox, 0, nb.oy), pull)
+    if ViewBox.showsMap(nb) then
+      Voxel3D.draw(ChunkMesher.grass(nb.map), atlasFor(nb.map),
+                   Mat4.translate(nb.ox, 0, nb.oy), pull)
+    end
   end
   -- flower billboards: pulled like the characters and the grass, MINUS
   -- the depth of 8 world pixels along the view (8 sin a -- the camera
@@ -1119,10 +1209,20 @@ function VoxelScene.render(state, w, h, vw, vh, paletteFor, eyes)
   Voxel3D.draw(ChunkMesher.flowers(state.map), atlasFor(state.map), nil,
                fpull, ShadowMap.snug(nil))
   for _, nb in ipairs(state.neighbors or {}) do
-    Voxel3D.draw(ChunkMesher.flowers(nb.map), atlasFor(nb.map),
-                 Mat4.translate(nb.ox, 0, nb.oy), fpull,
-                 ShadowMap.snug(Mat4.translate(nb.ox, 0, nb.oy)))
+    if ViewBox.showsMap(nb) then
+      Voxel3D.draw(ChunkMesher.flowers(nb.map), atlasFor(nb.map),
+                   Mat4.translate(nb.ox, 0, nb.oy), fpull,
+                   ShadowMap.snug(Mat4.translate(nb.ox, 0, nb.oy)))
+    end
   end
+
+  -- The map's atmosphere -- god rays down from the invisible canopy, and
+  -- whatever drifts through them (see ForestAtmos). Additive over the
+  -- finished depth buffer, so the trees occlude the light and the light
+  -- writes nothing; here in the prop slot, after everything the beams
+  -- should fall across and inside drawScene so VR gets them per eye. On
+  -- the one map that has any, today.
+  ForestAtmos.draw(state.map)
 
   -- The VR pokedex in the player's left hand, last of all: a prop over
   -- the world drawn with real depth, so leaning it into a wall still
@@ -1157,12 +1257,20 @@ function VoxelScene.render(state, w, h, vw, vh, paletteFor, eyes)
 
   end   -- drawScene
 
+  -- the viewport fields are this function's for the length of this
+  -- function, whichever way it leaves (see where they are set)
+  local function done(result)
+    Voxel3D.cull, Voxel3D.keyColor = nil, nil
+    ViewBox.stop()
+    return result
+  end
+
   if not eyes then
     if not Voxel3D.beginScene(w, h, cx, cy, vw, vh, skyFor(state.map)) then
-      return nil
+      return done(nil)
     end
     drawScene()
-    return Voxel3D.endScene()
+    return done(Voxel3D.endScene())
   end
 
   -- The VR frame: the same scene once per eye, each into its own named
@@ -1177,12 +1285,12 @@ function VoxelScene.render(state, w, h, vw, vh, paletteFor, eyes)
     if eye.adopt then FirstPerson.adoptVReye(eye.camera) end
     if not Voxel3D.beginScene(eye.w, eye.h, cx, cy, vw, vh,
                               skyFor(state.map), eye.slot) then
-      return nil
+      return done(nil)
     end
     drawScene()
     out[i] = Voxel3D.endScene()
   end
-  return out
+  return done(out)
 end
 
 return VoxelScene

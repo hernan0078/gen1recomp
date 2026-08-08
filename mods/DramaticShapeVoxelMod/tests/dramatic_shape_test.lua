@@ -105,7 +105,7 @@ local rows = Pipelines.rows({ save = { options = opts } })
 T.eq(#rows, 2, "each pipeline contributes exactly one options row")
 local byLabel = {}
 for _, row in ipairs(rows) do byLabel[row.label] = row end
-T.check(byLabel["3D WORLD"] ~= nil, "the 3D WORLD row is offered")
+T.check(byLabel["3D WORLD"] ~= nil, "the VOXEL row is offered")
 T.check(byLabel["MINIATURE"] ~= nil, "the T-SHIFT row is offered")
 T.eq(byLabel["3D WORLD"].value(), "FULL 3D", "the row renders the current rung's label")
 
@@ -142,6 +142,7 @@ T.check(not fullIds["pipeline:tiltshift"],
   "FULL takes T-SHIFT off the menu -- it owns the blur")
 T.check(not fullIds["DRAMATIC_SHAPE:grid"], "and V-GRID")
 T.check(not fullIds["DRAMATIC_SHAPE:curve"], "and V-CURVE")
+T.check(not fullIds["DRAMATIC_SHAPE:viewbox"], "and RENDER DIST")
 T.check(not fullIds["DRAMATIC_SHAPE:daytime"], "and DAYTIME")
 
 -- but the battle rows survive it: they are not knobs on the look, and FULL
@@ -204,8 +205,19 @@ T.check(not pinnedIds["battleLayout"],
 T.eq(layoutGame.save.options.battleLayout, "og",
   "and a save that had WIDE is set to OG -- the only layout the shot composes in")
 
+-- the STADIUM rung is still a staged fight, so it pins the layout exactly
+-- as 2D-3D does: what changes on that rung is what stands on the cells, not
+-- where the cells are or what screen they are composed for
+Battles.setting:setValue("stadium", layoutGame)
+T.eq(Battles.enabled(), true, "STADIUM stages the fight like 2D-3D does")
+layoutGame.save.options.battleLayout = "wide"
+Runtime.call("ui.options.rows", function(_, r) return r end, layoutGame,
+             { { id = "battleLayout" } })
+T.eq(layoutGame.save.options.battleLayout, "og",
+  "and pins BATTLE LAYOUT to OG the same way")
+
 -- switching 3D-BTL off hands the row straight back, WIDE and all
-Battles.setting:setIndex(2, layoutGame)
+Battles.setting:setValue(false, layoutGame)
 T.eq(Battles.enabled(), false, "3D-BTL off")
 local handedBack = Runtime.call("ui.options.rows", function(_, r) return r end,
                                 layoutGame,
@@ -235,7 +247,7 @@ T.eq(layoutGame.save.options.battleLayout, "wide",
 -- switch the row back on and the pin comes back with it, FULL or no FULL.
 -- (Arriving at FULL for real runs applyFull, which switches the row on -- so
 -- in the game the pin still follows the preset, by way of the row.)
-Battles.setting:setIndex(1, layoutGame)
+Battles.setting:setValue(true, layoutGame)
 Runtime.call("ui.options.rows", function(_, r) return r end, layoutGame,
              { { id = "battleLayout" } })
 T.eq(layoutGame.save.options.battleLayout, "og",
@@ -308,7 +320,8 @@ local order = {}
 for i, row in ipairs(grouped) do order[row.id] = i end
 T.check(order["pipeline:tiltshift"] < order["DRAMATIC_SHAPE:grid"],
   "the mode's settings follow its pipeline rows")
-T.eq(order["DRAMATIC_SHAPE:battles"] - order["pipeline:tiltshift"], 4,
+-- V-GRID, V-CURVE, RENDER DIST, WATER, FOREST FX, then 3D-BTL
+T.eq(order["DRAMATIC_SHAPE:battles"] - order["pipeline:tiltshift"], 6,
   "and sit in one unbroken block, not scattered to the end of the list")
 T.check(order["void_fill"] > order["DRAMATIC_SHAPE:battles"],
   "with the engine's own later rows still after them")
@@ -366,7 +379,7 @@ T.check(rowIndex(menu, "pipeline:tiltshift"), "T-SHIFT too")
 -- down than the player left it.
 do
 local Battles = run.loader.exports.DRAMATIC_SHAPE.lib.require("OverworldBattle")
-Battles.setting:setIndex(2, menuGame)             -- staged battles off
+Battles.setting:setValue(false, menuGame)         -- staged battles off
 menuGame.save.options.battleLayout = "wide"
 Pipelines.setLevel("voxel", 2)
 local layoutMenu = OptionsMenu.new(menuGame)
@@ -384,22 +397,37 @@ T.eq(layoutMenu.index, rowIndex(layoutMenu, "DRAMATIC_SHAPE:battles"),
   "with the cursor still on the row the player just used")
 end
 
--- level 2 is the "SLIGHT" rung: any rung that is not FULL, so the settings the
+-- level 2 is the "15" rung: any rung that is not FULL, so the settings the
 -- preset owns are back on the menu
 Pipelines.setLevel("voxel", 2)
 local hookedRows = Runtime.call("ui.options.rows", function(_, r) return r end,
                                { data = Data }, { { id = "text_speed" } })
-T.eq(#hookedRows, 11, "the options hook added a row per setting")
-local grid, curve, water = hookedRows[2], hookedRows[3], hookedRows[4]
-local battles, backRow, daytime = hookedRows[5], hookedRows[6], hookedRows[7]
--- the AA row is hookedRows[8]; it is read in its own block below, because
--- this chunk is one main function and has 200 local slots to spend
+-- one per setting, plus the STADIUM ROM action row -- which is not a setting
+-- (nothing to store, nothing for the mod manager to persist) and is offered
+-- on every platform, saying WHERE? rather than IMPORT where there is no file
+-- dialog to open
+T.eq(#hookedRows, 14, "the options hook added a row per setting, plus the "
+  .. "STADIUM ROM action row")
+local grid, curve, water = hookedRows[2], hookedRows[3], hookedRows[5]
+local battles, backRow, daytime = hookedRows[7], hookedRows[8], hookedRows[9]
+-- the RENDER DIST row is hookedRows[4], FOREST FX hookedRows[6] and AA
+-- hookedRows[10]; all three are read where they are used rather than named
+-- here, because this chunk is one main function and has 200 local slots to
+-- spend
+T.eq(hookedRows[4].label, "RENDER DIST", "the viewport row carries its label")
+T.eq(hookedRows[4].value(), "FIT",
+  "and defaults to FIT -- the cut IS the window the flat game already "
+  .. "framed, which is the whole claim the row makes")
 T.eq(water.label, "WATER", "the water row carries its label")
 T.eq(water.value(), "FULL",
   "and defaults to FULL -- reflections are the point of having the row")
 water.step({ save = { options = {} }, mods = { modOptions = {} } }, 1)
 T.eq(water.value(), "SKY",
   "stepping down drops the screen-space march and keeps the sky, sun and moon")
+T.eq(hookedRows[6].label, "FOREST FX", "the atmosphere row carries its label")
+T.eq(hookedRows[6].value(), "FULL",
+  "and defaults to FULL -- it only spends anything on a map with an "
+  .. "atmosphere entry, which is one forest today")
 T.eq(daytime.label, "DAYTIME", "the day/night row carries its label")
 T.eq(daytime.value(), "SYNC",
   "and defaults to SYNC -- no value set follows the clock on the wall")
@@ -408,9 +436,10 @@ T.eq(grid.value(), "OFF", "the grid starts off")
 T.eq(curve.label, "ROUND WORLD", "the curve row carries its label")
 T.eq(curve.value(), "OFF", "the curve starts off")
 T.eq(battles.label, "3D BATTLES", "the overworld-battle row carries its label")
-T.eq(battles.value(), "ON",
-  "overworld battles are on by default -- the mode's headline is the world "
-  .. "in 3D, and a battle is where the player spends half the game")
+T.eq(battles.value(), "2D-3D A",
+  "overworld battles are on by default, on the rung that stands the game's "
+  .. "own pics on the map -- the mode's headline is the world in 3D, and a "
+  .. "battle is where the player spends half the game")
 T.eq(backRow.label, "BACK SPRITES", "the back-pic row carries its label")
 T.eq(backRow.value(), "OFF",
   "and is off by default -- what the mode advertises is BOTH mons out on the "
@@ -429,20 +458,19 @@ T.eq(settingGame.mods.modOptions.DRAMATIC_SHAPE.grid, true,
 grid.step(settingGame)
 T.eq(grid.value(), "OFF", "stepping again toggles it back")
 
--- the curve is a four-rung ladder rather than a toggle, and wraps
+-- the curve is a six-rung ladder rather than a toggle, and wraps
 curve.step(settingGame, 1)
 T.eq(curve.value(), "LIGHT", "stepping the curve climbs its ladder")
 T.eq(settingGame.save.options.modOptions.DRAMATIC_SHAPE.curve, 1,
   "the curve level persists alongside the grid, not over it")
 T.eq(settingGame.save.options.modOptions.DRAMATIC_SHAPE.grid, false,
   "and the grid it shares a bucket with is untouched")
-curve.step(settingGame, 1)
-curve.step(settingGame, 1)
-T.eq(curve.value(), "STRONG", "the ladder reaches its top rung")
+for _ = 1, 4 do curve.step(settingGame, 1) end
+T.eq(curve.value(), "PLANET", "the ladder reaches its top rung")
 curve.step(settingGame, 1)
 T.eq(curve.value(), "OFF", "and wraps back to OFF")
 curve.step(settingGame, -1)
-T.eq(curve.value(), "STRONG", "stepping down from OFF wraps to the top")
+T.eq(curve.value(), "PLANET", "stepping down from OFF wraps to the top")
 curve.step(settingGame, 1)
 
 -- the strength scales with the view height, so a rung looks the same at
@@ -452,9 +480,25 @@ T.eq(WorldCurve.k(154), 0, "an OFF curve bends nothing")
 curve.step(settingGame, 1)
 T.check(math.abs(WorldCurve.k(154) - WorldCurve.AMOUNTS[2] / 154) < 1e-9,
   "rung 1's coefficient is its amount over the view height")
-T.check(WorldCurve.AMOUNTS[2] < WorldCurve.AMOUNTS[3]
-        and WorldCurve.AMOUNTS[3] < WorldCurve.AMOUNTS[4],
-  "the ladder climbs")
+for i = 2, #WorldCurve.AMOUNTS do
+  T.check(WorldCurve.AMOUNTS[i] > WorldCurve.AMOUNTS[i - 1],
+    "the ladder climbs at rung " .. (i - 1))
+end
+-- rung 5 is the HALF SPHERE, and that is arithmetic rather than taste: the
+-- parabola y = k d^2 osculates a sphere of radius R at its pole when
+-- k = 1 / 2R, so an amount of 1 puts the sphere's radius at half a view
+-- height -- which is exactly where the diorama's box is cut, so the
+-- model's own rim is that sphere's equator
+T.eq(WorldCurve.AMOUNTS[#WorldCurve.AMOUNTS], 1.0,
+  "the top rung's amount is 1 -- the half sphere")
+do
+  local Dio = run.loader.exports.DRAMATIC_SHAPE.lib.require("Diorama")
+  local vh = 288
+  local kTop = WorldCurve.AMOUNTS[#WorldCurve.AMOUNTS] / vh
+  T.check(math.abs(1 / (2 * kTop) - vh * Dio.BOX_FRAC) < 1e-6,
+    "whose radius is the diorama's own half-size: the model ends where "
+    .. "the dome does")
+end
 T.check(math.abs(WorldCurve.k(308) * 2 - WorldCurve.k(154)) < 1e-9,
   "halving the zoom halves the coefficient, so the bend looks the same")
 -- the CPU copy Voxel3D.project uses must agree with the shader's quadratic
@@ -466,9 +510,7 @@ T.check(math.abs(WorldCurve.drop(k, 0, 0, 3, 4) - 25 * k) < 1e-9,
 T.check(WorldCurve.drop(k, 0, 0, 20, 0) > 4 * WorldCurve.drop(k, 0, 0, 10, 0)
         - 1e-9,
   "and accelerates, so the far edge rolls away faster than the near one")
-curve.step(settingGame, 1)
-curve.step(settingGame, 1)
-curve.step(settingGame, 1)
+for _ = 1, 5 do curve.step(settingGame, 1) end
 T.eq(curve.value(), "OFF", "the curve is left off for the rows below")
 
 -- ------- AA renders the pass larger and folds it back down
@@ -482,7 +524,7 @@ do
 local AntiAlias = run.loader.exports.DRAMATIC_SHAPE.lib.require("AntiAlias")
 local VoxelGrid = run.loader.exports.DRAMATIC_SHAPE.lib.require("VoxelGrid")
 local aaGame = { save = { options = {} }, mods = { modOptions = {} } }
-local aa = hookedRows[8]
+local aa = hookedRows[10]
 T.eq(aa.label, "SMOOTHING", "the anti-aliasing row carries its label")
 T.eq(aa.value(), "OFF",
   "and starts off -- supersampling is a cost knob, and a mod must not spend "
@@ -1124,11 +1166,553 @@ Game.keypressed(keyGame, "7")
 T.neq(Curve.setting:get(), curveBefore, "7 cycles V-CURVE")
 
 local Battles = run.loader.exports.DRAMATIC_SHAPE.lib.require("OverworldBattle")
-T.eq(Battles.setting:get(), true, "3D-BTL starts on")
+
+-- The two STADIUM rungs are gated on the models being installed, and they are
+-- not installed anywhere this suite runs: the repository carries no Pokemon
+-- Stadium data, so a clean clone has none and a developer checkout has them
+-- only after tools/stadium_pack.py has been run. What the walk below is about
+-- is the LADDER -- five rungs, in order, wrapping -- so the gate is held OPEN
+-- for it and the skipping behaviour is tested on its own further down, where
+-- it is the subject rather than an accident of the machine it ran on.
+--
+-- Held in GLOBALS rather than locals, here and for the pack probe below: this
+-- chunk is at Lua's 200-local ceiling and three more would not compile.
+BATTLE_ROW_GATE = Battles.setting.gate
+Battles.setting:setGate(function() return true end)
+
+T.eq(Battles.setting:get(), true, "3D-BTL starts on 2D-3D A")
+T.eq(Battles.discs(), false, "which stages the fight on the map")
 Game.keypressed(keyGame, "8")
-T.eq(Battles.setting:get(), false, "8 toggles overworld battles off")
+T.eq(Battles.setting:get(), "flatB",
+  "8 steps to 2D-3D B -- the same pics, on the discs")
+T.eq(Battles.discs(), true,
+  "and that IS a disc rung, with no Stadium model anywhere in it")
 Game.keypressed(keyGame, "8")
-T.eq(Battles.setting:get(), true, "and back on")
+T.eq(Battles.setting:get(), "stadium",
+  "again and it is STADIUM A, the models on the map")
+T.eq(Battles.discs(), false, "back on the map")
+Game.keypressed(keyGame, "8")
+T.eq(Battles.setting:get(), "stadiumB",
+  "again and it is STADIUM B, the models on the discs")
+T.eq(Battles.discs(), true, "on the discs again")
+Game.keypressed(keyGame, "8")
+T.eq(Battles.setting:get(), false, "again and overworld battles are off")
+Game.keypressed(keyGame, "8")
+T.eq(Battles.setting:get(), true, "and the ladder wraps back to 2D-3D A")
+
+Battles.setting:setGate(BATTLE_ROW_GATE)
+
+-- ------- importing a ROM instead of being told where to put one
+--
+-- The row is an ACTION, not a setting: it has no stored rung, so it is not in
+-- SETTINGS and the mod manager's page does not carry it. What it shows is a
+-- state, and what it does is open the host's file dialog -- which is why it
+-- is absent where no dialog can be opened rather than being offered as a
+-- button that does nothing.
+;(function()
+  local Pick = run.loader.exports.DRAMATIC_SHAPE.lib.require("StadiumRomPick")
+  local Install =
+    run.loader.exports.DRAMATIC_SHAPE.lib.require("StadiumInstall")
+
+  T.check(type(Pick.canDialog()) == "boolean",
+    "the picker reports whether this platform has a file dialog at all")
+
+  -- The row is offered on EVERY platform. It used to be dropped where no
+  -- dialog could be opened, which on Android read as the feature being
+  -- missing rather than manual -- and the folder path it needed to show was
+  -- only ever written to a console a phone does not have.
+  local row = Pick.row()
+  T.check(row ~= nil, "the row is offered whatever the platform can do")
+  T.eq(row.label, "STADIUM ROM", "and says what it is for")
+  T.check(type(row.step) == "function", "and does something when pressed")
+  T.eq(row.value(),
+    Install.available() and "READY" or (Pick.canDialog() and "IMPORT" or "WHERE?"),
+    "reading READY once installed, IMPORT where a dialog can be opened, and "
+    .. "WHERE? where pressing it can only name the folder -- a row that said "
+    .. "IMPORT and then did not import would be the worse lie")
+
+  -- and the drop folder it would name is an absolute path, which the note
+  -- screen has to be able to show in full
+  T.check(type(Install.romHint()) == "string" and #Install.romHint() > 0,
+    "there is a folder to name")
+
+  -- A ROM that carries no models must be refused BEFORE anything is written.
+  -- An empty build otherwise completes with nothing attempted and therefore
+  -- nothing failed, and the marker gets written saying so -- which on a
+  -- machine that already had a set would uninstall it, because the marker is
+  -- the only thing that makes 151 files on disk count as installed.
+  T.eq(Install.beginFrom("", "empty"), false,
+    "an empty file is refused outright")
+  T.eq(select(2, Install.beginFrom(("\0"):rep(4096), "zeros")) ~= nil, true,
+    "and so is a file that is not a ROM, with a reason")
+  T.eq(Install.status.state ~= "building", true,
+    "and neither of those started a build")
+end)()
+
+-- ------- the model set, when there is one
+--
+-- Everything below that loads a .dsm needs a BUILT set, and the repository
+-- deliberately carries none: the models are Pokemon Stadium's data, built out
+-- of the player's own ROM at runtime (StadiumInstall) or by
+-- tools/stadium_pack.py into assets/stadium/ in a developer checkout. So a
+-- clean clone has nothing to read, and these say so and stand down rather
+-- than failing for the absence of data that is absent on purpose.
+--
+-- Announced rather than silent. A test that quietly evaporates when its
+-- fixture is missing is a test that has stopped running and not told anyone,
+-- which is worse than one that fails.
+HAVE_STADIUM_PACKS =
+  run.loader.exports.DRAMATIC_SHAPE.lib.require("StadiumPack").available(25)
+if not HAVE_STADIUM_PACKS then
+  print("SKIP stadium model tests -- no built .dsm set (run "
+        .. "tools/stadium_pack.py, or play once with a ROM in baseroms/)")
+end
+
+-- ------- the eyes blink once a loop, not six times a second
+--
+-- A texture animation is sampled at the SKELETAL animation's frame and HOLDS
+-- its last entry past the end of its own stream, which is what the game's own
+-- sampler does. Wrapping on the stream's length instead plays it over and
+-- over: Rattata's standby loop is 40 frames and its blink is 5, so that came
+-- out as six blinks a second.
+--
+-- Driven through a stub rather than a real rig, because building one needs
+-- meshes and there is no graphics context here -- and the rule under test is
+-- pure index arithmetic that does not care.
+;(function()
+  local Rig = run.loader.exports.DRAMATIC_SHAPE.lib.require("StadiumRig")
+  -- one prim on channel 0, whose stream values 6/7/8 map to textures 60/70/80
+  local prim = { tex = 1, texAnim = 0, texMap = { [6] = 60, [7] = 70,
+                                                  [8] = 80 } }
+  local model = {
+    prims = { prim },
+    textures = { [1] = { w = 1, h = 1 }, [60] = { w = 1, h = 1 },
+                 [70] = { w = 1, h = 1 }, [80] = { w = 1, h = 1 } },
+    -- Rattata's actual blink: open, half, closed, half, open
+    auxAnims = { { frames = 5, loopStart = 0, channels = { { 6, 8, 7, 8, 6 } } } },
+  }
+  local part = { prim = prim }
+  local stub = setmetatable({ model = model, parts = { part } }, Rig)
+
+  -- StadiumPack.image wants a real texture; what is asserted here is WHICH
+  -- index was chosen, so record it instead
+  local Pack = run.loader.exports.DRAMATIC_SHAPE.lib.require("StadiumPack")
+  local realImage = Pack.image
+  local picked
+  Pack.image = function(_, index) picked = index return nil end
+
+  local function at(frame)
+    stub.frameAt = frame
+    stub:textures(1)
+    return picked
+  end
+
+  T.eq(at(0), 60, "frame 0 of the blink is the open eye")
+  T.eq(at(1), 80, "frame 1 is half closed")
+  T.eq(at(2), 70, "frame 2 is shut")
+  T.eq(at(4), 60, "and frame 4 is open again -- one blink, five frames")
+  -- the whole point: frames 5..39 of the forty-frame idle are NOT a second
+  -- blink, they are the eye staying open
+  T.eq(at(5), 60, "frame 5, past the end of the blink, HOLDS the open eye")
+  T.eq(at(20), 60, "and so does frame 20")
+  T.eq(at(39), 60, "and frame 39, the last of the idle loop")
+
+  Pack.image = realImage
+end)()
+
+-- ------- the skeleton runs at 60, the textures step at 30
+--
+-- The animation streams carry one value per frame at 30 Hz, so replayed
+-- honestly against a 60 Hz camera every pose holds for two frames and the
+-- models visibly stutter against everything around them. StadiumRig blends
+-- between consecutive frames instead -- but NOT across a snap, because these
+-- are Euler triples and two triples that describe nearly the same rotation
+-- can be nowhere near each other component by component. Walking from one to
+-- the other is a bone flipping over inside a frame, which is exactly the
+-- glitch a naive version of this shipped with.
+--
+-- Driven on a REAL species, through a rig with no meshes (there is no
+-- graphics context here, and pose() only touches the matrix arrays).
+;(function()
+  if not HAVE_STADIUM_PACKS then return end
+  local lib = run.loader.exports.DRAMATIC_SHAPE.lib
+  local Pack, Rig = lib.require("StadiumPack"), lib.require("StadiumRig")
+  local model = Pack.load(25)                     -- Pikachu
+  local rig = setmetatable({ model = model, pivotM = {}, drawM = {},
+                             accX = {}, accY = {}, accZ = {}, parts = {} }, Rig)
+  local slot = model.ctx[Pack.SLOT.idle]
+  local anim = (slot ~= Pack.NONE) and (slot + 1) or nil
+  local frames = anim and model.anims[anim].frames or 0
+
+  -- every bone's world origin under the pose as it stands
+  local function origins()
+    local out = {}
+    for b = 1, model.boneCount do
+      local o = (b - 1) * 12
+      out[b] = { rig.drawM[o + 4], rig.drawM[o + 8], rig.drawM[o + 12] }
+    end
+    return out
+  end
+
+  T.check(frames > 8, "Pikachu's standby loop is long enough to sample")
+
+  rig:pose(anim, 3, true)
+  local a = origins()
+  rig:pose(anim, 4, true)
+  local c = origins()
+  rig:pose(anim, 3.5, true)
+  local b = origins()
+
+  T.eq(rig.frameAt, 3,
+    "half a frame in, the TEXTURE frame is still the whole one -- an eye is "
+    .. "open or it is shut and there is no halfway swap to draw")
+
+  -- the bone that travels furthest between those two frames is the one with
+  -- something to say about the blend
+  local best, moved = nil, 0
+  for i = 1, #a do
+    local d = ((c[i][1] - a[i][1]) ^ 2 + (c[i][2] - a[i][2]) ^ 2
+               + (c[i][3] - a[i][3]) ^ 2) ^ 0.5
+    if d > moved then best, moved = i, d end
+  end
+  T.check(moved > 0, "and some bone actually moves between frames 3 and 4")
+
+  -- halfway is HALFWAY: within a twentieth of the step of the midpoint of the
+  -- two frames it sits between, on every axis. A blend that overshoots, or
+  -- that walks the long way round a wrapped angle, fails this by miles.
+  local slack = moved / 20
+  for axis = 1, 3 do
+    local mid = (a[best][axis] + c[best][axis]) / 2
+    T.check(math.abs(b[best][axis] - mid) <= slack,
+      ("the half-frame pose sits between its two frames on axis %d"):format(axis))
+  end
+
+  -- and a whole frame is the frame itself, untouched: the blend has to be
+  -- exactly nothing at k = 0, or every stepped caller (the blink probe, the
+  -- oracle diff) is reading a pose the pack does not contain
+  rig:pose(anim, 4, true)
+  local again = origins()
+  T.eq(again[best][1], c[best][1],
+    "and a whole frame is that frame exactly, with nothing blended into it")
+end)()
+
+-- ------- growing out of the ball
+--
+-- The engine sizes its flat pic in the Game Boy's three steps across the
+-- twelve frames AFTER the ball has finished opening. The model runs its own
+-- ramp instead, started when the poof begins: continuous, and overlapping the
+-- ball rather than following it.
+;(function()
+  if not HAVE_STADIUM_PACKS then return end
+  local lib = run.loader.exports.DRAMATIC_SHAPE.lib
+  local Mon = lib.require("StadiumMon")
+
+  local mon = Mon.new("player")
+  T.eq(mon:growScale(), 1, "a Pokemon that is not arriving is full size")
+  T.eq(mon:beginGrow(), false,
+    "and one with no model cannot start growing -- there is nothing to size")
+
+  mon.model = { height = 10, rootScale = 1 }
+  T.eq(mon:beginGrow(), true, "with a model, the arrival starts")
+  T.eq(mon:growScale(), 0, "from nothing at all")
+  T.eq(mon:beginGrow(), false,
+    "and starting again is refused -- the engine's own send-out seam fires a "
+    .. "third of a second later and must not restart the ramp")
+
+  -- the curve: slow, then quick through the middle, then settling
+  local last, monotonic = -1, true
+  for i = 0, 10 do
+    mon.grow = i / 10
+    local s = mon:growScale()
+    if s < last then monotonic = false end
+    last = s
+  end
+  T.check(monotonic, "the ramp never goes backwards")
+  mon.grow = 0.5
+  T.eq(mon:growScale(), 0.5, "and is half size exactly half way through")
+  mon.grow = 0.25
+  T.check(mon:growScale() < 0.25,
+    "slower than linear early, so the Pokemon is still small while the ball "
+    .. "is coming apart")
+
+  -- and it ends, rather than sticking at 0.99
+  mon.grow = nil
+  mon.dt = 0
+  mon:beginGrow()
+  for _ = 1, 200 do mon:update(1 / 60) end
+  T.eq(mon.grow, nil, "the ramp finishes")
+  T.eq(mon:growScale(), 1, "at exactly full size")
+  T.eq(mon.grewOwn, true,
+    "and remembers it owned this arrival, so the engine's three-step ramp is "
+    .. "not consulted for it afterwards -- it reads 5/7 in the gap and shrank "
+    .. "the Pokemon back down at the very end of the grow")
+end)()
+
+-- ------- the pack cache must not evict a Pokemon that is standing there
+--
+-- The eviction order is keyed on LOADS, and a side only loads when its
+-- species changes -- so a Pokemon that has been out for a few turns is the
+-- least recently loaded thing in the cache. A fifth species entering the
+-- battle evicted it and RELEASED ITS TEXTURES mid-fight, and the next draw
+-- threw "Cannot use object after it has been released" from inside the scene
+-- pass, which took both models off the screen for the rest of the battle.
+;(function()
+  if not HAVE_STADIUM_PACKS then return end
+  local Pack = run.loader.exports.DRAMATIC_SHAPE.lib.require("StadiumPack")
+  local keep = Pack.KEEP
+  Pack.forget()
+  Pack.KEEP = 2
+
+  local held = Pack.load(1)
+  T.check(held ~= nil, "a model loads")
+  local slot = held.textures and held.textures[1]
+  T.check(slot ~= nil, "and carries at least one texture slot")
+
+  -- more species than the cache holds, WITHOUT saying the first is in use
+  Pack.load(4) Pack.load(7) Pack.load(10)
+  T.eq(slot.image, nil,
+    "an evicted model's texture slot is CLEARED, not left holding a released "
+    .. "object -- a released Image is still truthy, so the corpse came back "
+    .. "out of image() and died at mesh:setTexture")
+
+  -- and with `keep` said every frame, as the mode does, it is never evicted
+  Pack.forget()
+  local live = Pack.load(1)
+  for _, dex in ipairs({ 4, 7, 10, 13 }) do
+    Pack.keep(1)
+    Pack.load(dex)
+  end
+  T.eq(Pack.load(1), live,
+    "a species the mode keeps saying is on the field is still the same "
+    .. "cached model after four others have loaded past it")
+
+  Pack.KEEP = keep
+  Pack.forget()
+end)()
+
+-- ------- and an animation must not walk the Pokemon out of the shot
+--
+-- Stadium's animations were authored for a camera that followed the Pokemon;
+-- this one holds two fixed cells. 65 of the 148 send-out entrances travel
+-- more than a body-height off the spot, up to seven and a half -- which is
+-- not drama here, it is an empty tile.
+;(function()
+  if not HAVE_STADIUM_PACKS then return end
+  local lib = run.loader.exports.DRAMATIC_SHAPE.lib
+  local Pack, Rig, Mon = lib.require("StadiumPack"), lib.require("StadiumRig"),
+                         lib.require("StadiumMon")
+  local model = Pack.load(87)                    -- Dewgong, the worst of them
+  local rig = setmetatable({ model = model, pivotM = {}, drawM = {},
+                             accX = {}, accY = {}, accZ = {}, parts = {} }, Rig)
+  rig:measureBind()
+
+  -- the same quantity StadiumRig.anchor corrects -- bone origins averaged and
+  -- weighted by the vertices each bone moves -- written out here rather than
+  -- called, so this checks the behaviour and not its own arithmetic
+  local weight, total = {}, 0
+  for b = 1, model.boneCount do weight[b] = 0 end
+  for _, prim in ipairs(model.prims) do
+    for k = 1, prim.vertCount do
+      local b = prim.bone[k]
+      if weight[b] then weight[b] = weight[b] + 1; total = total + 1 end
+    end
+  end
+  local function centre()
+    local x, y, z = 0, 0, 0
+    for b = 1, model.boneCount do
+      local q = weight[b]
+      if q > 0 then
+        local o = (b - 1) * 12
+        x = x + rig.drawM[o + 4] * q
+        y = y + rig.drawM[o + 8] * q
+        z = z + rig.drawM[o + 12] * q
+      end
+    end
+    return x / total, y / total, z / total
+  end
+  local raw = model.height / (model.rootScale > 0 and model.rootScale or 1)
+  local slot = model.ctx[Pack.SLOT.entrance]
+  local anim = slot + 1
+
+  local function driftAt(frame, limit)
+    rig:pose(anim, frame, false)
+    rig:anchor(limit)
+    local x, y, z = centre()
+    return (((x - model.bindCX) ^ 2 + (y - model.bindCY) ^ 2
+             + (z - model.bindCZ) ^ 2) ^ 0.5) / raw
+  end
+
+  T.check(driftAt(40, nil) > 5,
+    "unanchored, Dewgong's entrance carries it more than five body-heights "
+    .. "off its tile -- straight out of a frame that holds about one")
+  T.check(driftAt(40, Mon.TRAVEL) <= Mon.TRAVEL * 1.001,
+    "anchored, it stays inside the travel limit")
+  -- and the animations that never travel are left completely alone
+  local before = driftAt(0, nil)
+  T.eq(driftAt(0, Mon.TRAVEL), before,
+    "a frame already inside the limit is not moved at all -- the anchor takes "
+    .. "out the EXCESS, so a lunge is still a lunge")
+end)()
+
+-- ------- the three species the extraction cannot read stand as PICS
+--
+-- Exeggutor, Tangela and Magmar come out of the ROM with standby loops that
+-- throw bones off the body; the packer measures that and flags them. They
+-- used to hold their bind pose for the whole fight, which among a hundred and
+-- forty-eight species that breathe reads as broken rather than as still. So
+-- they decline the model outright and the Game Boy's own battle pic stands
+-- instead -- the same fallback a species with no pack at all takes.
+;(function()
+  if not HAVE_STADIUM_PACKS then return end
+  local lib = run.loader.exports.DRAMATIC_SHAPE.lib
+  local Mon = lib.require("StadiumMon")
+  for _, dex in ipairs({ 103, 114, 126 }) do
+    local mon = Mon.new("enemy")
+    T.eq(mon:setSpecies(dex), false,
+      ("dex %d has corrupt animation data, so no model stands for it")
+      :format(dex))
+    T.eq(mon.rig, nil, "and there is no rig left behind to draw")
+  end
+end)()
+
+-- ------- the collapse waits for the HP bar
+--
+-- onFaint fires the moment HP reaches zero, but the engine queues the visible
+-- collapse behind the move animation and the bar drain -- seconds later. The
+-- model has to wait for the same thing, or a Pokemon lies down while its own
+-- health is still draining above it. `shownHP` is the engine's own bar
+-- position, so this is the bar and not a guess at how long it takes.
+;(function()
+  local Stad = run.loader.exports.DRAMATIC_SHAPE.lib.require("Stadium")
+  local ready, due = Stad._faintReady, Stad._faintStillDue
+
+  T.eq(ready({ shownHP = 19, mon = { hp = 0 } }), false,
+    "a battler at 0 HP whose bar still reads 19 is NOT ready to collapse")
+  T.eq(ready({ shownHP = 1, mon = { hp = 0 } }), false,
+    "nor at one point left on the bar")
+  T.eq(ready({ shownHP = 0, mon = { hp = 0 } }), true,
+    "and is the moment the bar reaches zero")
+  T.eq(ready({ mon = { hp = 0 } }), true,
+    "a battler with no bar to drain collapses at once, rather than never")
+  T.eq(ready(nil), false, "and a battler that is gone is not ready")
+
+  T.eq(due({ faintQueued = true, mon = { hp = 0 } }), true,
+    "a queued faint at 0 HP is still owed")
+  T.eq(due({ faintQueued = true, mon = { hp = 12 } }), false,
+    "one that has been healed since is not -- the debt is dropped, not paid "
+    .. "late at whoever is standing there")
+  T.eq(due({ mon = { hp = 0 } }), false, "and an unqueued battler owes nothing")
+end)()
+
+-- ------- and it gets to FINISH
+--
+-- The engine takes a fainted pic off the field when its slide ends, which is
+-- fourteen frames of a 60 Hz clock -- under a quarter of a second. The
+-- shortest faint animation in the Stadium set is 49 frames of a 30 Hz one,
+-- the median 110 and the longest 230, so held to the pic's window every model
+-- was cut off inside the first fifth of its own collapse. It now stays until
+-- the animation is done, and not one frame past that.
+;(function()
+  local Stad = run.loader.exports.DRAMATIC_SHAPE.lib.require("Stadium")
+  local onField = Stad._onField
+
+  -- the engine's own guards, mirrored in the shape onField reads them
+  local battle = { fxHidden = function() return false end,
+                   fxFaintActive = function(_, b) return b.sliding end }
+  local function mon(state, done)
+    return { state = state, finished = function() return done end }
+  end
+
+  battle.enemy = { sprite = true }
+  T.eq(onField(battle, "enemy", mon("idle", false)), true,
+    "a Pokemon that is standing there is on the field")
+
+  battle.enemy = { sprite = true, fainted = true, sliding = true }
+  T.eq(onField(battle, "enemy", mon("faint", false)), true,
+    "and one whose pic is still sliding is too, as it always was")
+
+  battle.enemy = { sprite = true, fainted = true, sliding = false }
+  T.eq(onField(battle, "enemy", mon("faint", false)), true,
+    "the pic has gone but the model has not finished falling -- it STAYS, "
+    .. "which is the whole of the fix: a quarter-second window was cutting "
+    .. "off animations that run for one to eight seconds")
+  T.eq(onField(battle, "enemy", mon("faint", true)), false,
+    "and the frame its collapse finishes, it goes -- nothing is left lying "
+    .. "on the field for the rest of the fight")
+  T.eq(onField(battle, "enemy", mon("idle", false)), false,
+    "a fainted battler whose model never got as far as the faint goes with "
+    .. "the pic, exactly as before")
+  T.eq(onField(battle, "enemy", nil), false,
+    "and a side with no model at all is not held open by this")
+
+  -- ------- FLY and DIG take it off the field entirely
+  --
+  -- The charge turn runs a 19-24 frame slide and ends by setting
+  -- `picFx[battler].hidden`; the release turn clears it. That field is the
+  -- engine's whole answer to "is this Pokemon on screen", and it is NOT
+  -- fxHidden, which is the damage blink alone -- so a model reading only the
+  -- blink stood on its tile while every attack aimed at it missed.
+  battle.enemy = { sprite = true }
+  battle.picFx = { [battle.enemy] = { hidden = true } }
+  T.eq(onField(battle, "enemy", mon("attack", false)), false,
+    "a Pokemon that has flown up or dug in is not on the field, however "
+    .. "much of its own animation is still to play")
+
+  battle.picFx = { [battle.enemy] = { kind = "slideOff", t = 4 } }
+  T.eq(onField(battle, "enemy", mon("attack", false)), true,
+    "but it IS while the engine's slide is still running -- which is the "
+    .. "window its own launch animation plays in")
+
+  battle.picFx = { [battle.enemy] = {} }
+  T.eq(onField(battle, "enemy", mon("idle", false)), true,
+    "and a pic program that has finished and cleared leaves it standing")
+  battle.picFx = nil
+end)()
+
+-- ------- and the two STADIUM rungs are SKIPPED when the models are not there
+--
+-- The mod ships no Pokemon Stadium data, so on a machine whose owner has not
+-- supplied that ROM the row has three stops rather than five. Checked by
+-- gating them off by hand rather than by hiding the packs, because what is
+-- being tested is the ladder's behaviour and not the installer's.
+--
+-- 2D-3D B survives that, which is the point of it being its own rung: the
+-- discs are generated in Lua and the Pokemon on them are the game's own art,
+-- so the disc framing is available to a player who has no Stadium ROM at all.
+;(function()
+  local gate = Battles.setting.gate
+  Battles.setting:setGate(function(value)
+    return value ~= "stadium" and value ~= "stadiumB"
+  end)
+  T.eq(Battles.setting:rungs(), 3,
+    "with no models built the 3D-BTL row offers three rungs, not five")
+  Battles.setting:setValue(true, Game)
+  Game.keypressed(keyGame, "8")
+  T.eq(Battles.setting:get(), "flatB",
+    "8 still reaches 2D-3D B, which needs no ROM")
+  Game.keypressed(keyGame, "8")
+  T.eq(Battles.setting:get(), false,
+    "and the next press steps straight past both STADIUM rungs to OFF")
+  Game.keypressed(keyGame, "8")
+  T.eq(Battles.setting:get(), true, "and back to 2D-3D A")
+
+  -- a save that CHOSE stadium before the ROM went missing reads as the
+  -- default, rather than as a mode with nothing behind it -- and the stored
+  -- value is left alone, so putting the ROM back restores the choice
+  Battles.setting.index = 3
+  T.eq(Battles.setting:get(), true,
+    "a stored STADIUM with no models behind it reads as 2D-3D A")
+  -- and opening the gate hands the choice straight back, off the stored
+  -- value that was never overwritten. Opened by HAND rather than by putting
+  -- the real gate back: the real one answers "are the models installed on
+  -- this machine", which is false wherever this suite runs from a clean
+  -- clone -- and the subject here is the ladder, not the installer.
+  Battles.setting:setGate(function() return true end)
+  T.eq(Battles.setting:get(), "stadium",
+    "and comes back the moment the models do")
+  Battles.setting:setGate(gate)
+  Battles.setting:setValue(true, Game)
+end)()
 
 -- ------- SELECT makes the same step the 3 key does
 --
@@ -2350,6 +2934,109 @@ T.check(math.abs(cex - 124) < 1 and math.abs(cey - 56) < 1,
 T.check(span(closeRig, shot.player) < span(rig, shot.player),
   "the mons render smaller on it, which is what it trades for fitting")
 
+-- ------- the quarter turns
+--
+-- An arena may be laid down any of the four ways (BattleArena's `turn`), and
+-- the whole claim of the feature is that this is a fact about the GROUND and
+-- never about the shot: the footprint, the two mons and the camera turn
+-- together, so the pair land on the same two anchors at the same size and
+-- only what is behind them changes.
+--
+-- Asserted by REPROJECTING each turn through the real rig, exactly the way
+-- the unturned shot is checked above -- so a rig retune, or a sign error in
+-- the rotation, says so here rather than in a screenshot nobody takes.
+--
+-- In its own scope: the suite's main chunk sits at LuaJIT's 200-active-local
+-- ceiling, and every local below would be one more of them. The leading
+-- semicolon is the file's own convention -- without it the previous
+-- statement's `)` and this `(` parse as one call.
+;(function()
+  local corner = { shot.x, shot.y }
+  -- How wide a mon's own square comes out, measured ACROSS the arena's axis.
+  -- `span` above offsets along world X, which is across the axis only while
+  -- the arena is standing the way the mode was drawn; on the odd quarters the
+  -- axis IS X, so offsetting along it would measure the square's depth --
+  -- foreshortened by a camera that is looking almost straight down it -- and
+  -- report a shrinking mon that is nothing of the kind.
+  local function acrossSpan(cam, point, turn)
+    local d = (turn % 180 == 0) and { 8, 0 } or { 0, 8 }
+    local a = project(cam, { point[1] - d[1], point[2] - d[2] })
+    local b = project(cam, { point[1] + d[1], point[2] + d[2] })
+    return math.abs(b - a)
+  end
+  for _, turn in ipairs({ 0, 90, 180, 270 }) do
+    BattleCam.reset()
+    local a = BattleArena.at(corner[1], corner[2], "wide", turn)
+    T.check(a ~= nil, ("the wide arena places at turn %d"):format(turn))
+    T.eq(a.turn, turn, ("and carries the turn it was placed at (%d)"):format(turn))
+
+    -- the footprint swaps its reach on the odd quarters, which is the whole
+    -- reason a corridor takes one way round and refuses the other
+    local wantW = (turn % 180 == 0) and 3 or 6
+    local wantH = (turn % 180 == 0) and 6 or 3
+    T.eq(a.w, wantW, ("turn %d is %d cells across"):format(turn, wantW))
+    T.eq(a.h, wantH, ("and %d deep"):format(wantH))
+
+    -- both mons stay inside the footprint they were turned within, and stay
+    -- three cells apart -- the gap the move animations are scaled against
+    T.check(a.enemyCell[1] >= a.x and a.enemyCell[1] < a.x + a.w
+            and a.enemyCell[2] >= a.y and a.enemyCell[2] < a.y + a.h,
+      ("turn %d keeps the foe inside the footprint"):format(turn))
+    T.check(a.playerCell[1] >= a.x and a.playerCell[1] < a.x + a.w
+            and a.playerCell[2] >= a.y and a.playerCell[2] < a.y + a.h,
+      ("turn %d keeps the player inside it too"):format(turn))
+    local gap = math.abs(a.enemyCell[1] - a.playerCell[1])
+                + math.abs(a.enemyCell[2] - a.playerCell[2])
+    T.eq(gap, 3, ("turn %d still stands them three cells apart"):format(turn))
+
+    -- and which way the foe lies from the player, which is what `turn` NAMES
+    local dx = a.enemyCell[1] - a.playerCell[1]
+    local dy = a.enemyCell[2] - a.playerCell[2]
+    local want = ({ [0] = { 0, -3 }, [90] = { 3, 0 },
+                    [180] = { 0, 3 }, [270] = { -3, 0 } })[turn]
+    T.check(dx == want[1] and dy == want[2],
+      ("turn %d puts the foe %d,%d from the player: got %d,%d")
+      :format(turn, want[1], want[2], dx, dy))
+
+    -- THE INVARIANT: the same composition, whichever way round it stands
+    local r = BattleCam.rig(a, 0)
+    local ppx, ppy = project(r, a.player)
+    local eex, eey = project(r, a.enemy)
+    T.check(ppx ~= nil and eex ~= nil,
+      ("turn %d keeps both marks in front of the camera"):format(turn))
+    T.check(math.abs(ppx - 26) < 1 and math.abs(ppy - 96) < 1,
+      ("turn %d lands the player's mark on its anchor: (%.2f, %.2f)")
+      :format(turn, ppx, ppy))
+    T.check(math.abs(eex - 124) < 1 and math.abs(eey - 56) < 1,
+      ("turn %d lands the enemy's on its own: (%.2f, %.2f)")
+      :format(turn, eex, eey))
+    T.check(math.abs(acrossSpan(r, a.player, turn) - 64) < 4,
+      ("turn %d still makes the player's square a back pic wide (64px): got "
+       .. "%.2f"):format(turn, acrossSpan(r, a.player, turn)))
+    T.check(math.abs(acrossSpan(r, a.enemy, turn) - 56) < 4,
+      ("turn %d still makes the foe's square a front pic wide (56px): got "
+       .. "%.2f"):format(turn, acrossSpan(r, a.enemy, turn)))
+
+    -- the eye really did move: a turn that left the camera where it was would
+    -- pass every anchor test above by looking at the pair from the side
+    if turn ~= 0 then
+      local base = BattleArena.at(corner[1], corner[2], "wide", 0)
+      BattleCam.reset()
+      local r0 = BattleCam.rig(base, 0)
+      local moved = math.abs(r.eye[1] - r0.eye[1])
+                    + math.abs(r.eye[3] - r0.eye[3])
+      T.check(moved > 16,
+        ("turn %d actually moves the camera (%.1f world px)"):format(turn, moved))
+    end
+  end
+
+  -- degrees in, degrees out, and anything else folded onto the four
+  T.eq(BattleArena.quarters(360), 0, "a full turn is no turn")
+  T.eq(BattleArena.quarters(-90), 3, "and a negative one comes round the back")
+  T.eq(BattleArena.at(1, 1, "wide").turn, 0,
+    "an arena placed without a turn is the way the mode was drawn")
+end)()
+
 -- an arena picks its rig by name, and anything unnamed gets the default
 T.eq(BattleCam.rigFor({ cam = "wide" }), BattleCam.RIGS.wide,
   "an arena that asks for the wide lens gets it")
@@ -2579,7 +3266,7 @@ T.eq(Battles.backPinned(), false, "so nothing is pinned to the menu")
 
 local backGame = { save = { options = { modOptions = {} } },
                    mods = { modOptions = {} } }
-Battles.setting:setIndex(1, backGame)              -- 3D-BTL on
+Battles.setting:setValue(true, backGame)           -- 3D-BTL on 2D-3D
 Battles.backSetting:setIndex(2, backGame)          -- BACK SPRITES on
 T.eq(Battles.backPinned(), true, "switched on, the back pic is pinned")
 T.eq(backGame.save.options.modOptions.DRAMATIC_SHAPE.battleBack, true,
@@ -2590,7 +3277,7 @@ T.eq(backGame.save.options.modOptions.DRAMATIC_SHAPE.battles, true,
 -- and it means nothing at all with staged battles off: there is no staged
 -- shot for a back pic to be pinned in front of, and the engine's own battle
 -- screen already draws exactly this
-Battles.setting:setIndex(2, backGame)
+Battles.setting:setValue(false, backGame)
 T.eq(Battles.backPinned(), false,
   "with 3D-BTL off the setting decides nothing, whatever it is left at")
 T.eq(Battles.backSetting:get(), true, "without being rewritten underneath")
@@ -2606,7 +3293,7 @@ T.check(offIds["DRAMATIC_SHAPE:battles"], "3D-BTL itself is still offered")
 T.check(not offIds["DRAMATIC_SHAPE:battleBack"],
   "but BACK SPRITES is off the menu while there is no staged fight to be about")
 
-Battles.setting:setIndex(1, backGame)
+Battles.setting:setValue(true, backGame)
 local onRows = Runtime.call("ui.options.rows", function(_, r) return r end,
                             backGame, { { id = "tilt" } })
 local onAt = {}
@@ -3400,6 +4087,92 @@ T.check(not DayNight.isCanopy({ id = "MT_MOON_1F" }),
 T.check(not DayNight.isCanopy({ id = "PALLET_TOWN" }),
   "and an outdoor town is already the clock's in full")
 T.check(not DayNight.isCanopy(nil), "no map, no canopy")
+end
+
+-- ------- the air under the canopy
+--
+-- ForestAtmos hangs an INVISIBLE canopy above the forest's real trees and
+-- lets light down through it: fog for the scene shader, a volumetric
+-- march for the beams (GPU-only, not checkable here), colour and strength
+-- following the clock. Everything checkable without a GPU is checked:
+-- the authored table, the hour's ramp, and the seeded particle deal --
+-- which must come out identical on every visit.
+do
+local ForestAtmos =
+  run.loader.exports.DRAMATIC_SHAPE.lib.require("ForestAtmos")
+local DayNight = run.loader.exports.DRAMATIC_SHAPE.lib.require("DayNight")
+
+-- the authored table
+local cfg = ForestAtmos.configFor("VIRIDIAN_FOREST")
+T.check(cfg ~= nil, "Viridian Forest has an atmosphere entry")
+T.check(cfg and (cfg.canopyY or 0) > 32,
+  "whose invisible canopy hangs ABOVE the carved tree hulls (y = 32) -- "
+  .. "a ray is alpha zero at the canopy and only fades in below it")
+T.check(ForestAtmos.configFor("PALLET_TOWN") == nil,
+  "a map without an entry has no atmosphere at all")
+T.check(ForestAtmos.configFor(nil) == nil, "and no map id does not crash")
+
+-- the hour's ramp: gold spears by day, silver rays by night, both dying
+-- back through the twilight handover
+local fmap = { id = "VIRIDIAN_FOREST" }
+local day = ForestAtmos.frame(fmap, DayNight.T.day)
+local night = ForestAtmos.frame(fmap, DayNight.T.night)
+local dusk = ForestAtmos.frame(fmap, DayNight.T.dusk)
+T.check(day and night and dusk, "the forest answers at every pin")
+T.check(day.rayColor[1] > day.rayColor[3],
+  "the day's rays are sun-gold: more red than blue")
+T.check(night.rayColor[3] > night.rayColor[1],
+  "the night's are moon-silver: more blue than red")
+T.check(dusk.rayAlpha < day.rayAlpha and dusk.rayAlpha < night.rayAlpha,
+  "and the twilight is the dim handover between the two")
+T.check(day.fog.density > 0 and night.fog.density > 0,
+  "the haze never lifts entirely, day or night")
+T.check(day.moteLevel > 0.5 and day.fireflyLevel < 0.05,
+  "pollen drifts through the day's beams, with no fireflies out")
+T.check(night.fireflyLevel > 0.5 and night.moteLevel < 0.05,
+  "and the night shift trades them")
+
+-- the seeded deal: the same particles on every visit (the beams place
+-- themselves -- they are marched from the shadow map, not dealt)
+local tcfg = { canopyY = 56, fadeTo = 28, seed = 77,
+               motes = { count = 12 }, fireflies = { count = 6 } }
+local a = ForestAtmos.layout(tcfg, 320, 320)
+local b = ForestAtmos.layout(tcfg, 320, 320)
+T.eq(#a.motes, 12, "the pollen musters at authored strength")
+T.eq(#a.flies, 6, "the fireflies too")
+local same = true
+for i = 1, #a.motes do
+  local m1, m2 = a.motes[i], b.motes[i]
+  same = same and m1.x == m2.x and m1.y == m2.y and m1.z == m2.z
+end
+T.check(same, "and the deal comes out identical on every visit")
+local under = true
+for _, m in ipairs(a.motes) do
+  if m.y >= tcfg.canopyY then under = false end
+end
+T.check(under, "everything drifts BELOW the canopy it lives under")
+
+-- the tuning override, the same handle arena_editor holds on battles
+ForestAtmos.setOverride("PALLET_TOWN", { canopyY = 40, fog = {} })
+T.check(ForestAtmos.configFor("PALLET_TOWN") ~= nil,
+  "an override stages an atmosphere a driver can tune live")
+ForestAtmos.setOverride("VIRIDIAN_FOREST", false)
+T.check(ForestAtmos.configFor("VIRIDIAN_FOREST") == nil,
+  "false is meaningful: this map has none, whatever the file says")
+ForestAtmos.setOverride("PALLET_TOWN", nil)
+ForestAtmos.setOverride("VIRIDIAN_FOREST", nil)
+T.check(ForestAtmos.configFor("VIRIDIAN_FOREST") ~= nil
+        and ForestAtmos.configFor("PALLET_TOWN") == nil,
+  "and nil hands both back to the authored table")
+
+-- the row: OFF is the ladder's last rung and the frame answers nothing
+T.eq(ForestAtmos.setting.values[1], "full",
+  "the atmosphere defaults to FULL -- it costs a handful of quads and "
+  .. "exists on one map")
+ForestAtmos.setting:sync("off")
+T.check(ForestAtmos.frame(fmap, DayNight.T.day) == nil,
+  "OFF answers no frame at all: no fog uniform, no draw, no spend")
+ForestAtmos.setting:sync("full")
 end
 
 -- ------- a shadow keeps hold of the feet that throw it
@@ -4261,6 +5034,68 @@ local eyaw = select(2, VRRig.battleMount({ 150, 10, 200 }, { 100, 10, 200 }))
 T.check(near(eyaw, math.pi / 2),
   "a camera east of its focus turns the mapping a quarter toward west")
 
+-- ------- both VR seats follow the arena's quarter turn
+--
+-- `turn` promises the same composition on different ground, and every camera
+-- has to keep it or the promise is only true on the flat screen. The two VR
+-- seats keep it in different ways and both are pinned here.
+--
+-- THE STANDARD MOUNT keeps it by construction: it is built from the flat
+-- battle camera's own eye and aim, which turn with the arena, so the seat
+-- goes round with them. That is asserted rather than assumed, because the
+-- day someone builds this seat from the arena's cells instead, the picture
+-- stays plausible and starts pointing the wrong way.
+--
+-- THE DIORAMA disc does NOT get it for free: a fight arrives there as a
+-- pillar of map about the arena's midpoint, whose bearing is its bearing in
+-- the WORLD, so a turned arena landed on the table lying across the head.
+-- Diorama.battleYaw takes the turn back out; the hand-turn rides on top.
+--
+-- In its own scope: the suite's main chunk is at LuaJIT's local ceiling.
+;(function()
+  local Arena = run.loader.exports.DRAMATIC_SHAPE.lib.require("BattleArena")
+  local Cam = run.loader.exports.DRAMATIC_SHAPE.lib.require("BattleCam")
+  local Dio = run.loader.exports.DRAMATIC_SHAPE.lib.require("Diorama")
+
+  local function mountYawFor(turn)
+    Cam.reset()
+    local a = Arena.at(6, 6, "wide", turn)
+    local rig = Cam.rig(a, 0, true)
+    return select(2, VRRig.battleMount(rig.eye, rig.focus))
+  end
+
+  local base = mountYawFor(0)
+  for _, turn in ipairs({ 90, 180, 270 }) do
+    -- rotating (eye - focus) by +turn takes atan2(dx, dz) to (bearing - turn)
+    local want = (base - math.rad(turn) + math.pi) % (2 * math.pi) - math.pi
+    local got = (mountYawFor(turn) + math.pi) % (2 * math.pi) - math.pi
+    T.check(near(got, want, 1e-6),
+      ("the standard VR mount turns with a %d-degree arena: %.4f, wanted %.4f")
+      :format(turn, got, want))
+  end
+
+  -- the disc: the turn comes back out, so the fight lies the same way on the
+  -- table however the ground under it is laid
+  local hand = Dio.yaw
+  Dio.yaw = 0
+  T.eq(Dio.battleYaw({ turn = 0 }), 0,
+    "an unturned arena leaves the disc where the hands left it")
+  T.check(near(Dio.battleYaw({ turn = 90 }), -math.pi / 2, 1e-9),
+    "a quarter-turned arena counter-turns the disc a quarter")
+  T.check(near(Dio.battleYaw({ turn = 270 }), math.pi / 2, 1e-9),
+    "and three quarters comes round the other way, inside (-pi, pi]")
+  T.eq(Dio.battleYaw(nil), 0, "no arena is no turn, not an error")
+  -- and the same rule the standard mount lands on, so the two agree
+  T.check(near(Dio.battleYaw({ turn = 90 }) - Dio.battleYaw({ turn = 0 }),
+               mountYawFor(90) - mountYawFor(0), 1e-6),
+    "the disc and the standard mount answer a turn by the same amount")
+  -- the player's own hand-turn still rides on top of it
+  Dio.yaw = math.rad(30)
+  T.check(near(Dio.battleYaw({ turn = 90 }), math.rad(30) - math.pi / 2, 1e-9),
+    "the hands keep whatever they did to the model, on top of the turn")
+  Dio.yaw = hand
+end)()
+
 -- an eye seated with that yaw really faces the arena: an identity head at
 -- the seat comes out looking WEST, and the view agrees to the metre
 local seated = VRRig.eyeCamera(pose, fov, { 150, 10, 200 }, { 0, 0, 0 },
@@ -4452,6 +5287,187 @@ T.eq(type(VRMod.leave), "function",
   .. "is wired to it")
 end
 vrRigSection()
+
+-- ------- the DIORAMA modes
+--
+-- The VR row is a ladder now -- OFF / STANDARD / DIORAMA / DIORAMA-MR --
+-- and the two diorama rungs are one presentation rather than a follow-on
+-- from the VOXEL ladder: a viewport that cuts the world to a ball (a
+-- pillar while a fight is staged), a base a tile deep under it, and grips
+-- that carry, turn and resize the whole thing.
+;(function()
+  local lib = run.loader.exports.DRAMATIC_SHAPE.lib
+  local VRM = lib.require("VR")
+  local D = lib.require("Diorama")
+  local V3 = lib.require("Voxel3D")
+  local Rig = lib.require("VRRig")
+
+  -- ------- the row
+  T.eq(#VRM.setting.values, 4, "the VR row carries four rungs")
+  T.eq(VRM.setting.values[2], true,
+    "STANDARD is still stored as `true` -- a save written when the row was "
+    .. "a toggle comes back on the rung it was left on")
+  T.eq(VRM.setting.labels[3] .. "/" .. VRM.setting.labels[4],
+    "DIORAMA/DIORAMA-MR", "and the two diorama rungs are labelled")
+  VRM.setting:sync(false)
+  T.eq(VRM.mode(), "off", "OFF is off")
+  VRM.setting:sync(true)
+  T.eq(VRM.mode(), "standard", "the stored true reads as STANDARD")
+  T.eq(VRM.dioramaMode(), false, "which is not a diorama")
+  VRM.setting:sync("diorama")
+  T.eq(VRM.mode(), "diorama", "and the diorama rungs read as themselves")
+  T.check(VRM.enabled() and VRM.dioramaMode(), "both on and a diorama")
+  VRM.setting:sync("diorama-mr")
+  T.check(VRM.dioramaMode(), "MR is a diorama too")
+  T.eq(VRM.setting:get(), "diorama-mr", "under its own stored value")
+
+  -- ------- the frame's own switches
+  T.eq(D.begin("standard"), false, "STANDARD opens no diorama frame")
+  T.eq(D.keyColor(), nil, "and keys nothing")
+  T.eq(D.begin("diorama"), true, "DIORAMA opens one")
+  T.eq(D.keyColor(), nil, "and still keys nothing -- it has a sky")
+  T.eq(D.begin("diorama-mr"), true, "MR opens one as well")
+  T.eq(D.keyColor()[2], 1, "and keys the background PURE green")
+  T.check(D.keyColor()[1] == 0 and D.keyColor()[3] == 0,
+    "no red and no blue in it: a keyer wants the colour the world cannot be")
+
+  -- ------- the viewport
+  --
+  -- A square BOX with a hard edge while the world is flat, and the ball
+  -- with the dissolved rim while V-CURVE bends it -- one click of the
+  -- left stick throws the row and swaps the whole reading.
+  local Curve = lib.require("WorldCurve")
+  local curveWas = Curve.setting:get()
+  Curve.setting:sync(0)
+  local box = D.viewport(100, 200, 288)
+  T.eq(box.kind, D.BOX, "a flat world is cut by a square BOX")
+  T.check(box.x == 100 and box.z == 200, "centred on the view")
+  T.check(math.abs(box.r - 288 * D.BOX_FRAC) < 1e-6,
+    "spanning exactly the view the standard rung would have framed, so "
+    .. "the zoom rows keep meaning what they mean")
+  T.check(1 / box.invFade <= 0.5,
+    "with a HARD edge: a flat world is a thing with sides")
+  T.eq(D.fadeFor(100, false), 0, "and no fade band to speak of")
+  Curve.setting:sync(3)
+  local ball = D.viewport(100, 200, 288)
+  T.eq(ball.kind, D.BALL, "V-CURVE turns the box into a BALL")
+  T.check(math.abs(1 / ball.invFade - ball.r * D.FADE_FRAC) < 1e-6,
+    "whose rim is a gradient fade into the sky rather than an edge")
+  T.check(ball.r > box.r,
+    "and which reaches further than the square did, so the throw curls "
+    .. "the same model rather than shaving its corners off")
+  local pillar = D.pillar({ mid = { 64, 96 },
+                            player = { 64, 120 }, enemy = { 64, 72 } })
+  T.eq(pillar.kind, D.PILLAR, "a staged fight cuts a vertical PILLAR instead")
+  T.check(pillar.x == 64 and pillar.z == 96, "about the arena's midpoint")
+  T.check(math.abs(pillar.r - (24 + D.ARENA_APRON)) < 1e-6,
+    "wide enough for both mons and an apron -- the floating disc")
+  T.eq(D.pillar(nil), nil, "and no arena cuts nothing")
+  Curve.setting:sync(0)
+  local flatFight = D.pillar({ mid = { 0, 0 } })
+  T.eq(flatFight.kind, D.PILLAR,
+    "the fight stays round whatever the curve is doing: a square tile "
+    .. "floating in the air is not the picture")
+  T.check(1 / flatFight.invFade > 1,
+    "and keeps its dissolve with the curve off too -- a hard edge on "
+    .. "something hanging in the air reads as a cookie cutter")
+  Curve.setting:sync(curveWas)
+
+  -- the shader takes the volume through a plain field, so no pass can be
+  -- surprised by a cut world (Voxel3D never requires lib/Diorama)
+  T.eq(V3.cull, nil, "nothing has left a viewport on Voxel3D")
+  T.eq(V3.keyColor, nil, "nor a chroma key")
+
+  -- ------- the grips
+  D.reset()
+  local function hand(x, y, z) return { pos = { x, y, z } } end
+  T.eq(D.gesture({ gripL = 0, gripR = 0 }), false, "an open hand holds nothing")
+  -- one grip: the model follows that hand, metre for metre, and the first
+  -- frame of a squeeze moves nothing (there is no delta yet)
+  D.gesture({ gripL = 1, handl = hand(0, 1, 0) })
+  T.eq(D.offset[2], 0, "taking hold does not itself move the model")
+  D.gesture({ gripL = 1, handl = hand(0.1, 1.25, -0.2) })
+  T.check(math.abs(D.offset[1] - 0.1) < 1e-9
+          and math.abs(D.offset[2] - 0.25) < 1e-9
+          and math.abs(D.offset[3] + 0.2) < 1e-9,
+    "one grip carries it through the room in all three axes")
+  D.gesture({ gripL = 0, gripR = 0 })
+  D.gesture({ gripL = 1, handl = hand(5, 5, 5) })
+  T.check(math.abs(D.offset[2] - 0.25) < 1e-9,
+    "letting go and taking hold somewhere else never snaps it")
+  -- both grips: the turn and the resize, off the line between the hands
+  D.reset()
+  D.gesture({ gripL = 1, gripR = 1,
+              handl = hand(-0.2, 1, 0), handr = hand(0.2, 1, 0) })
+  local zoom0 = D.zoom
+  D.gesture({ gripL = 1, gripR = 1,
+              handl = hand(0, 1, 0.2), handr = hand(0, 1, -0.2) })
+  T.check(math.abs(D.yaw - math.pi / 2) < 1e-6,
+    "hand over hand turns the model by the same angle the mapping yaws by")
+  T.check(math.abs(D.zoom - zoom0) < 1e-6,
+    "a pure turn does not resize it")
+  D.gesture({ gripL = 1, gripR = 1,
+              handl = hand(0, 1, 0.4), handr = hand(0, 1, -0.4) })
+  T.check(math.abs(D.zoom - zoom0 * 2) < 1e-6,
+    "opening the hands opens the viewport by the same factor")
+  for _ = 1, 12 do
+    D.gesture({ gripL = 1, gripR = 1,
+                handl = hand(0, 1, 4), handr = hand(0, 1, -4) })
+    D.gesture({ gripL = 1, gripR = 1,
+                handl = hand(0, 1, 0.001), handr = hand(0, 1, -0.001) })
+  end
+  T.check(D.zoom >= D.SCALE_MIN and D.zoom <= D.SCALE_MAX,
+    "and it stays inside its stops however hard it is worked")
+
+  -- ------- and NO base under it
+  --
+  -- The ground was extruded a tile deep once, cut to the viewport's shape
+  -- and wearing Mt Moon's cave floor down its sides. It was removed at the
+  -- user's request; the cut ends at the ground plane. Pinned so nothing
+  -- puts a plinth back under the model by accident.
+  T.eq(D.drawBase, nil, "the diorama draws no base under the world")
+  T.eq(D.BASE_DEPTH, nil, "and keeps none of the arithmetic for one")
+  -- ------- and the curve reaches the eyes
+  --
+  -- It did not: eyeCamera hardcoded `curve = 0`, and Voxel3D reads that
+  -- field with `or` -- where 0 is TRUE in Lua -- so the bend was pinned
+  -- off for every VR frame and the diorama's own V-CURVE throw did
+  -- nothing at all. The rig takes it as a parameter now, and declining is
+  -- still the default for the modes that want to decline.
+  local POSE = { pos = { 0, 0, 0 }, quat = { 0, 0, 0, 1 } }
+  local FOV = { angleLeft = -0.7, angleRight = 0.7,
+                angleUp = 0.6, angleDown = -0.6 }
+  local plain = Rig.eyeCamera(POSE, FOV, { 0, 0, 0 }, { 0, 0, 0 }, 64)
+  T.eq(plain.curve, 0,
+    "an eye declines the curve unless it asks -- first person and the "
+    .. "battle seat both do")
+  local bent = Rig.eyeCamera(POSE, FOV, { 0, 0, 0 }, { 0, 0, 0 }, 64, nil,
+                             0.004)
+  T.eq(bent.curve, 0.004,
+    "and a diorama's eye carries the bend it asked for, which is what "
+    .. "the left stick's throw is for")
+
+  -- ------- the mapping carries all three axes now
+  local a = Rig.dioramaAnchor(0, { 0.5, 0.25, -0.75 })
+  T.check(math.abs(a[1] - 0.5) < 1e-9 and math.abs(a[3] + 0.75) < 1e-9,
+    "the diorama anchor takes the carry in all three axes")
+  T.check(math.abs(a[2] - (0.25 - Rig.VIEW_DIST)) < 1e-9,
+    "with the height still riding the rung's own viewing line")
+  local b = Rig.dioramaAnchor(0, 0.25)
+  T.check(math.abs(b[2] - a[2]) < 1e-9 and b[1] == 0,
+    "and a bare number is still the height alone -- STANDARD's own drag")
+
+  -- ------- what the mode refuses
+  T.eq(VRM.DIORAMA_RUNG, 3,
+    "a diorama holds the VOXEL ladder on an orbit rung: there is no 2D "
+    .. "diorama, and no first-person one either")
+  T.eq(type(VRM.toggleCurve), "function",
+    "and the left stick's click throws V-CURVE instead of stepping views")
+
+  D.reset()
+  VRM.setting:sync(false)
+  T.eq(D.on, false, "and the frame shuts with the session")
+end)()
 
 -- ------- the skybox's checker and glow are the sky's own, not the screen's
 --
@@ -4927,6 +5943,336 @@ end)()
   T.eq(select(1, Gun.ammo()), mag, "a refused shot spends no round")
   T.eq(Gun.reload(), false, "nor reloaded when it is already full")
   T.eq(Gun.visible(), false, "and it is not drawn with the mode off")
+end)()
+
+-- ------- STADIUM: the .dsm packs, and the rig that reads them
+--
+-- Wrapped in its own scope for the same reason the horde block above is:
+-- the main chunk is at Lua's 200-local ceiling, so a new top-level local
+-- would refuse to compile.
+--
+-- What this is really guarding is the FORMAT SEAM. tools/stadium_pack.py
+-- writes those files and lib/StadiumPack.lua reads them, and the two agree
+-- only by having been written to agree -- there is no schema between them.
+-- A field inserted on one side and not the other slides every byte after it
+-- and produces no error at all: the models load, the numbers are garbage,
+-- and every Pokemon is silently scaled to nothing. That is exactly what
+-- happened once during development, and the assertion that caught it is the
+-- one below -- walk the bind pose with the REAL rig code and check it
+-- against the header the packer wrote, which cannot agree by accident.
+;(function()
+local Pack = run.loader.exports.DRAMATIC_SHAPE.lib.require("StadiumPack")
+local Rig = run.loader.exports.DRAMATIC_SHAPE.lib.require("StadiumRig")
+
+-- The packs are generated (tools/stadium_pack.py) and a checkout without
+-- them is a legitimate state -- the mode declines per Pokemon. So the whole
+-- block is skipped rather than failed when they are not there.
+if not Pack.available(25) then
+  T.check(true, "stadium packs are not installed -- pack assertions skipped")
+  return
+end
+
+local pikachu = Pack.load(25)
+T.check(pikachu ~= nil, "a stadium pack loads")
+T.eq(pikachu.species, 25, "and knows which species it is")
+T.eq(pikachu.boneCount, 37, "Pikachu's rig is 37 bones, as the extract reports")
+T.check(pikachu.rootScale > 0.09 and pikachu.rootScale < 0.11,
+  "the model_root scale came through as the 0.1 the geo layout sets")
+
+-- the battle system's own slot table: idle is animation 0 for all 151
+-- species (manifest.json's animationSlots calls that one `code` evidence)
+T.eq(pikachu.ctx[Pack.SLOT.idle], 0, "the idle slot resolves to animation 0")
+T.check(pikachu.ctx[Pack.SLOT.faint] ~= Pack.NONE, "and the faint slot resolves")
+T.check(pikachu.ctx[Pack.SLOT.entrance] ~= Pack.NONE, "and the entrance slot")
+
+-- the move table is the Gen 1 move id, which is the engine's own `index`
+T.eq(#pikachu.moveAnim, Pack.N_MOVES, "every move id has a row")
+T.check(pikachu.moveAnim[85] ~= Pack.NONE,
+  "and THUNDERBOLT (move 85) names an animation Pikachu has")
+
+-- animations decode lazily; asking for one is what builds its tracks
+local tracks = Pack.tracks(pikachu, 1)
+T.check(type(tracks) == "table", "an animation's tracks decode on demand")
+local animated = 0
+for b = 1, pikachu.boneCount do if tracks[b] then animated = animated + 1 end end
+T.check(animated > 0 and animated <= pikachu.boneCount,
+  "and move a sane number of the rig's bones")
+
+-- THE SEAM. Walk the bind pose with the shipping rig code and measure it
+-- the way tools/stadium_pack.py measured it. The packer's own answer was
+-- checked against the reference glTF export on all 151 species, so
+-- agreement here means the byte layout, the bone tree, the rotation basis
+-- and the two-chain scale split all survived the trip into Lua.
+local function bindExtent(model)
+  local rig = setmetatable({
+    model = model, pivotM = {}, drawM = {}, accX = {}, accY = {}, accZ = {},
+    parts = {},
+  }, Rig)
+  rig:pose(nil, 0, false)
+  local drw = rig.drawM
+  local lo, hi = math.huge, -math.huge
+  for _, prim in ipairs(model.prims) do
+    for k = 1, prim.vertCount do
+      local o = (prim.bone[k] - 1) * 12
+      local y = drw[o + 5] * prim.px[k] + drw[o + 6] * prim.py[k]
+                + drw[o + 7] * prim.pz[k] + drw[o + 8]
+      y = y * model.rootScale
+      if y < lo then lo = y end
+      if y > hi then hi = y end
+    end
+  end
+  return hi - lo, lo
+end
+
+for _, dex in ipairs({ 25, 6, 95, 143 }) do
+  local model = Pack.load(dex)
+  if model then
+    local h, f = bindExtent(model)
+    -- a tenth of a game unit of slack: bone translations are stored as
+    -- integers and the packer measured in doubles
+    T.check(math.abs(h - model.height) < 0.5,
+      ("species %d: the rig's bind pose is the height the pack recorded "
+       .. "(walked %.2f, header %.2f)"):format(dex, h, model.height))
+    T.check(math.abs(f - model.floor) < 0.5,
+      ("species %d: and its feet are where the pack put them"):format(dex))
+  end
+end
+
+-- No species is held at its bind pose any more. Magmar (with Pidgeot,
+-- Dodrio, Exeggutor and Tangela) uses the game's hermite-keyframe animation
+-- mode, which the extractor used to misread as packed streams -- the flags
+-- byte was read at +0, the always-zero high half of the u16 -- and the
+-- packer then declared their exploding standby loops corrupt. The broken-
+-- idle detector stays as the guard, so this asserts it no longer fires.
+T.eq(Pack.load(126).staticPose, false,
+  "Magmar animates -- its hermite animations decode correctly now")
+T.eq(pikachu.staticPose, false, "and a packed-stream species does too")
+end)()
+
+-- ------- RENDER DIST: the orbit rungs cut to the window that frames them
+--
+-- The flat screen's answer to the same question the headset's diorama box
+-- asks. Two halves, and this asserts both: the CUT the shader takes (a
+-- rectangle, because a window is not square), and the SKIP it buys -- a
+-- connected map lying entirely outside the box is never submitted.
+;(function()
+
+local lib = run.loader.exports.DRAMATIC_SHAPE.lib
+local VB = lib.require("ViewBox")
+local Dio = lib.require("Diorama")
+local VS = lib.require("VoxelState")
+local Curve = lib.require("WorldCurve")
+local boxWas, curveWas = VB.setting:get(), Curve.setting:get()
+local angleWas = VS.angle
+Curve.setting:sync(0)
+
+-- ------- the ladder
+T.eq(VB.setting.values[1], 0,
+  "FIT is rung 0, so an unset save lands on the cut rather than off it")
+T.eq(VB.setting.labels[1], "FIT", "and FIT is what the row calls it")
+T.eq(VB.setting.labels[#VB.setting.labels], "OFF",
+  "OFF is the TOP of the ladder -- 'how much world' ending in all of it, "
+  .. "rather than a switch beside the sizes")
+for i = 2, #VB.FRACS - 1 do
+  T.check(VB.FRACS[i] > VB.FRACS[i - 1],
+    "the ladder opens out at rung " .. (i - 1))
+end
+T.eq(VB.FRACS[1], 1.0,
+  "and FIT is exactly one window: the cut is the framing the flat game "
+  .. "already had, not one this file made up")
+
+-- ------- which rungs it is about
+VB.setting:sync(0)
+T.eq(VB.appliesTo(0), false, "OFF has no 3D pass to cut")
+T.check(VB.appliesTo(VS.FULL_LEVEL), "FULL is cut -- it IS the model read")
+T.check(VB.appliesTo(2) and VB.appliesTo(3) and VB.appliesTo(4)
+        and VB.appliesTo(5),
+  "and so is every orbit rung: 15, 35, 50 and 75")
+T.eq(VB.appliesTo(VS.FP_LEVEL), false,
+  "1ST is not: the player is standing IN the world, and a box round a "
+  .. "walking eye is a fog-of-war circle rather than a model on a table")
+T.eq(VB.appliesTo(VS.TP_LEVEL), false, "nor 3RD, which is the same rig")
+
+-- ------- the footprint IS NOT the window
+--
+-- The bug this replaced: the box was the flat game's own vw-by-vh
+-- rectangle, which is the ground a camera frames at 0 degrees and at no
+-- rung the mode actually has. Every tilted rung frames a TRAPEZOID that
+-- reaches further north and flares wider out there, and a window-sized box
+-- cut the top and both sides off a world plainly on screen -- gaps, with
+-- sky showing through them.
+--
+-- So the footprint is checked against a RAY CAST through the orbit's own
+-- basis: the frame's corner rays dropped on the ground plane. If the closed
+-- form and the rays ever disagree, the picture has a hole in it.
+local REACH = VB.MAX_REACH * 288
+local function castFootprint(a)
+  local tanY = 1 / (2 * VS.FOCAL)
+  local tanX = tanY * (320 / 288)
+  local k = VS.FOCAL * 288
+  local ca, sa = math.cos(a), math.sin(a)
+  local n, s, x = -1e18, -1e18, 0
+  for i = 0, 200 do
+    local sy = -1 + 2 * i / 200
+    -- forward (0,-ca,-sa), true up (0,sa,-ca), right (1,0,0)
+    local dy = -ca + sy * tanY * sa
+    local dz = -sa - sy * tanY * ca
+    if dy < -1e-9 then
+      local t = (k * ca) / -dy                 -- eye height over the drop
+      local wz, wx = k * sa + t * dz, t * tanX
+      if -wz > n then n = -wz end
+      if wz > s then s = wz end
+      if wx > x then x = wx end
+    end
+  end
+  return n, s, x
+end
+for _, deg in ipairs({ 0, 15, 35, 50 }) do
+  local n, s, x = castFootprint(math.rad(deg))
+  local fn, fs, fx = VB.footprint(math.rad(deg), 320, 288, REACH)
+  T.check(math.abs(fn - n) < 1 and math.abs(fs - s) < 1
+          and math.abs(fx - x) < 1,
+    ("%d degrees: the footprint is the ground the rays actually land on "
+     .. "(north %.0f/%.0f, south %.0f/%.0f, side %.0f/%.0f)")
+      :format(deg, fn, n, fs, s, fx, x))
+end
+-- straight down is the ONE case the old window-sized box got right, which
+-- is why it survived being wrong everywhere else
+do
+  local n, s, x = VB.footprint(0, 320, 288, REACH)
+  T.check(math.abs(n - 144) < 1e-6 and math.abs(s - 144) < 1e-6
+          and math.abs(x - 160) < 1e-6,
+    "at 0 degrees it reduces to the flat window, exactly")
+end
+-- and the shape of the error the gaps were: north grows with the tilt,
+-- south SHRINKS (the bottom of the frame is nearer than the focus), and
+-- the sides flare with the far field
+do
+  local n15, s15, x15 = VB.footprint(math.rad(15), 320, 288, REACH)
+  local n50, s50, x50 = VB.footprint(math.rad(50), 320, 288, REACH)
+  T.check(n15 > 144 and n50 > n15,
+    "every tilted rung reaches further north than the window did -- which "
+    .. "is the gap that used to open along the top")
+  T.check(s15 < 144,
+    "and less far south, because the bottom of the frame is nearer the eye "
+    .. "than the focus is")
+  T.check(x15 > 160 and x50 > x15,
+    "and wider at the sides, because the far field is further away -- the "
+    .. "other gap")
+  T.check(s50 < n50 * 0.5,
+    "so the picture is mostly AHEAD of the view centre, and the box has to "
+    .. "sit north of it rather than around it")
+end
+-- past atan(2*FOCAL) -- about 63 degrees -- the horizon is inside the frame
+-- and the honest answer is infinite. That is the whole reason there is a
+-- row: something has to name a distance.
+do
+  local n75 = VB.footprint(math.rad(75), 320, 288, REACH)
+  T.check(math.abs(n75 - REACH) < 1,
+    "at 75 the footprint is unbounded and the reach stands in for it")
+  local near = VB.footprint(math.rad(75), 320, 288, REACH / 2)
+  T.check(near < n75, "and a shorter reach brings the world's edge in")
+end
+
+-- ------- the cut itself
+VS.angle = math.rad(35)
+local box = VB.frame(100, 200, 320, 288, 3)
+T.eq(box.kind, Dio.BOX, "the cut is the shader's BOX kind, like the diorama's")
+T.eq(box.x, 100, "centred on the view in x, which the trapezoid is")
+T.check(box.z < 200,
+  "and NORTH of it in z, which the trapezoid also is -- a box centred on "
+  .. "the view centre is the bug that cut the top off")
+do
+  local n, s, x = VB.footprint(math.rad(35), 320, 288, REACH)
+  T.check(math.abs(box.rz - (n + s) * 0.5) < 1e-6,
+    "the half-depth spans the footprint from its south edge to its north")
+  T.check(math.abs(box.z - (200 - (n - s) * 0.5)) < 1e-6,
+    "and the centre sits exactly between them")
+  T.check(math.abs(box.rx - x) < 1e-6, "with the far field's own half-width")
+  T.check(box.rz > 144 and box.rx > 160,
+    "both bigger than the window at every tilted rung, so the cut can "
+    .. "never take a bite out of the picture")
+end
+T.check(box.rx ~= box.rz,
+  "which is the whole reason the box kind carries two half-extents: a "
+  .. "square cut on a wide frame either loses the sides or overshoots")
+T.check(1 / box.invFade <= 0.5,
+  "with a HARD edge while the world is flat: that IS the sides")
+-- and the diorama's own box still passes the same number twice, so one
+-- shader branch serves both
+local sq = Dio.viewport(0, 0, 288)
+T.eq(sq.rx, sq.r, "a headset's box is square in x")
+T.eq(sq.rz, sq.r, "and in z -- no window to be shaped like")
+
+-- the row opens it out, and OFF stops cutting entirely
+VB.setting:sync(1)
+local wide = VB.frame(100, 200, 320, 288, 3)
+T.check(wide.rx > box.rx and wide.rz > box.rz,
+  "a wider rung reaches further in both directions")
+VB.setting:sync(#VB.setting.values - 1)
+T.eq(VB.setting:get(), 4, "the top rung is OFF")
+T.eq(VB.frame(100, 200, 320, 288, 3), nil, "and OFF cuts nothing at all")
+T.eq(VB.cull, nil, "leaving no viewport on the module for a pass to inherit")
+
+-- a bent world has no straight sides, so the rim dissolves under V-CURVE --
+-- the same call Diorama.fadeFor makes for the same reason
+VB.setting:sync(0)
+Curve.setting:sync(3)
+local bent = VB.frame(0, 0, 320, 288, 3)
+T.check(1 / bent.invFade > 1,
+  "V-CURVE softens the box's rim: a hard edge across a bent world is a "
+  .. "lie about what is being looked at")
+Curve.setting:sync(0)
+
+-- ------- the coarse half: whole maps skipped before they are drawn
+VB.setting:sync(0)
+VS.angle = math.rad(35)
+local cut = VB.frame(0, 0, 320, 288, 3)
+-- a 10x9-block map (Pallet's shape) at the origin is under the box
+local here = { map = { def = { width = 10, height = 9 } }, ox = 0, oy = 0 }
+T.check(VB.showsMap(here), "the map under the box is drawn")
+-- the same map pushed a long way north-east cannot reach the picture
+local far = { map = { def = { width = 10, height = 9 } },
+              ox = 4000, oy = 4000 }
+T.eq(VB.showsMap(far), false,
+  "a connected map entirely outside the box is skipped -- no terrain, no "
+  .. "water, no grass, no flowers and no shadow pass")
+-- the test is taken against the CUT's own edge, which is the trapezoid's
+-- and not the window's -- the border ring is meshed outside a map's own
+-- rectangle, so a map that stops just short still has trees in frame
+T.check(VB.showsMap({ map = { def = { width = 1, height = 1 } },
+                      ox = cut.x + cut.rx + VB.PAD - 8, oy = cut.z }),
+  "a map just outside the edge is kept for its border ring, which is "
+  .. "meshed beyond its own rectangle")
+T.eq(VB.showsMap({ map = { def = { width = 1, height = 1 } },
+                   ox = cut.x + cut.rx + VB.PAD + 64, oy = cut.z }), false,
+  "and dropped once even the ring cannot reach")
+-- and the skip follows the trapezoid north: a map the OLD window-sized box
+-- would have thrown away is still on screen at a tilted rung
+T.check(VB.showsMap({ map = { def = { width = 4, height = 4 } },
+                      ox = -64, oy = -200 }),
+  "a map north of the view centre, past where a window-sized box ended, "
+  .. "is kept -- the camera is looking straight at it")
+VB.stop()
+T.check(VB.showsMap(far),
+  "with no box open every map is drawn, so a caller may guard "
+  .. "unconditionally -- which is every headset frame and every OFF rung")
+T.check(VB.showsMap(nil), "and a malformed neighbour is never skipped")
+
+-- ------- the sun has to notice the row
+--
+-- WHICH neighbours went into the shadow map is now a function of the box,
+-- and the box is the one input the sun's signature did not already carry.
+VB.setting:sync(0)
+local sigFit = VB.signature()
+VB.setting:sync(2)
+T.neq(VB.signature(), sigFit,
+  "opening the row out changes the sun's signature, so a map recorded "
+  .. "without a neighbour is redrawn with it")
+
+Curve.setting:sync(curveWas)
+VB.setting:sync(boxWas)
+VS.angle = angleWas
 end)()
 
 Pipelines.reset()

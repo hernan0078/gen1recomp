@@ -1,10 +1,10 @@
-# B20 - Unnamed building
+# B22 - Unnamed building
 
-![Unnamed building](img/B20_x5.png)
+![Unnamed building](img/B22_x5.png)
 
-`OVERWORLD` tileset, **8 x 12 cells** (16 x 24 tiles of 8px, 128 x 192 px). Appears **1 time** in the game. Tile ids index `assets/generated/tilesets/overworld.png`, 16 per row.
+`OVERWORLD` tileset, **8 x 8 cells** (16 x 16 tiles of 8px, 128 x 128 px). Appears **1 time** in the game. Tile ids index `assets/generated/tilesets/overworld.png`, 16 per row.
 
-Coordinates are 1-based and local to the building: cell x=1..8, y=1..12; tile column c=1..16, tile row r=1..24. No terrain padding is included - edge rows and columns that were pure ground have been trimmed.
+Coordinates are 1-based and local to the building: cell x=1..8, y=1..8; tile column c=1..16, tile row r=1..16. No terrain padding is included - edge rows and columns that were pure ground have been trimmed.
 
 ## Symbol grid
 
@@ -29,23 +29,11 @@ Coordinates are 1-based and local to the building: cell x=1..8, y=1..12; tile co
    y6 | I J | J J | J J | J J | J J | J J | J J | J K |
       | I L | L L | L L | L L | L L | L L | L L | L K |
       +-----+-----+-----+-----+-----+-----+-----+-----+
-   y7 | I J | J J | J J | J J | J J | J J | J J | J K |
+   y7 | I J | J J | J L | L J | J L | L J | J J | J K |
       | I L | L L | L L | L L | L L | L L | L L | L K |
       +-----+-----+-----+-----+-----+-----+-----+-----+
-   y8 | I J | J J | J J | J J | J J | J J | J J | J K |
-      | I L | L L | L L | L L | L L | L L | L L | L K |
-      +-----+-----+-----+-----+-----+-----+-----+-----+
-   y9 | I J | J J | J J | J J | J J | J J | J J | J K |
-      | I L | L L | L L | L L | L L | L L | L L | L K |
-      +-----+-----+-----+-----+-----+-----+-----+-----+
-  y10 | I J | J J | J J | J J | J J | J J | J J | J K |
-      | I L | L L | L L | L L | L L | L L | L L | L K |
-      +-----+-----+-----+-----+-----+-----+-----+-----+
-  y11 | I J | J J | J L | L J | J J | J J | J J | J K |
-      | I L | L L | L L | L L | L L | L L | L L | L K |
-      +-----+-----+-----+-----+-----+-----+-----+-----+
-  y12 | I L | L L | M N | J J | L L | L L | L L | L K |
-      | O P | P P | * Q | P P | P P | P P | P P | P R |
+   y8 | I L | L L | M N | J J | M N | J J | O P | L K |
+      | Q R | R R | * S | R R | * S | R R | T T | R U |
       +-----+-----+-----+-----+-----+-----+-----+-----+
 ```
 
@@ -72,23 +60,11 @@ Coordinates are 1-based and local to the building: cell x=1..8, y=1..12; tile co
    y6 |  15  10 |  10  10 |  10  10 |  10  10 |  10  10 |  10  10 |  10  10 |  10  31 |
       |  15  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  31 |
       +---------+---------+---------+---------+---------+---------+---------+---------+
-   y7 |  15  10 |  10  10 |  10  10 |  10  10 |  10  10 |  10  10 |  10  10 |  10  31 |
+   y7 |  15  10 |  10  10 |  10  75 |  75  10 |  10  75 |  75  10 |  10  10 |  10  31 |
       |  15  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  31 |
       +---------+---------+---------+---------+---------+---------+---------+---------+
-   y8 |  15  10 |  10  10 |  10  10 |  10  10 |  10  10 |  10  10 |  10  10 |  10  31 |
-      |  15  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  31 |
-      +---------+---------+---------+---------+---------+---------+---------+---------+
-   y9 |  15  10 |  10  10 |  10  10 |  10  10 |  10  10 |  10  10 |  10  10 |  10  31 |
-      |  15  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  31 |
-      +---------+---------+---------+---------+---------+---------+---------+---------+
-  y10 |  15  10 |  10  10 |  10  10 |  10  10 |  10  10 |  10  10 |  10  10 |  10  31 |
-      |  15  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  31 |
-      +---------+---------+---------+---------+---------+---------+---------+---------+
-  y11 |  15  10 |  10  10 |  10  75 |  75  10 |  10  10 |  10  10 |  10  10 |  10  31 |
-      |  15  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  75 |  75  31 |
-      +---------+---------+---------+---------+---------+---------+---------+---------+
-  y12 |  15  75 |  75  75 |  11  12 |  10  10 |  75  75 |  75  75 |  75  75 |  75  31 |
-      |  78  26 |  26  26 |  27  28 |  26  26 |  26  26 |  26  26 |  26  26 |  26  79 |
+   y8 |  15  75 |  75  75 |  11  12 |  10  10 |  11  12 |  10  10 |  68  69 |  75  31 |
+      |  78  26 |  26  26 |  27  28 |  26  26 |  27  28 |  26  26 |  74  74 |  26  79 |
       +---------+---------+---------+---------+---------+---------+---------+---------+
 ```
 
@@ -108,18 +84,10 @@ local rows = {
   {  15,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  31 },  -- r10
   {  15,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  31 },  -- r11
   {  15,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  31 },  -- r12
-  {  15,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  31 },  -- r13
+  {  15,  10,  10,  10,  10,  75,  75,  10,  10,  75,  75,  10,  10,  10,  10,  31 },  -- r13
   {  15,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  31 },  -- r14
-  {  15,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  31 },  -- r15
-  {  15,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  31 },  -- r16
-  {  15,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  31 },  -- r17
-  {  15,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  31 },  -- r18
-  {  15,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  10,  31 },  -- r19
-  {  15,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  31 },  -- r20
-  {  15,  10,  10,  10,  10,  75,  75,  10,  10,  10,  10,  10,  10,  10,  10,  31 },  -- r21
-  {  15,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  75,  31 },  -- r22
-  {  15,  75,  75,  75,  11,  12,  10,  10,  75,  75,  75,  75,  75,  75,  75,  31 },  -- r23
-  {  78,  26,  26,  26,  27,  28,  26,  26,  26,  26,  26,  26,  26,  26,  26,  79 },  -- r24
+  {  15,  75,  75,  75,  11,  12,  10,  10,  11,  12,  10,  10,  68,  69,  75,  31 },  -- r15
+  {  78,  26,  26,  26,  27,  28,  26,  26,  27,  28,  26,  26,  74,  74,  26,  79 },  -- r16
 }
 ```
 
@@ -127,7 +95,7 @@ local rows = {
 
 _Legend pending._
 
-- `*` = tile 27, used 1x
+- `*` = tile 27, used 2x
 - `A` = tile 76, used 1x
 - `B` = tile 83, used 14x
 - `C` = tile 77, used 1x
@@ -136,18 +104,21 @@ _Legend pending._
 - `F` = tile 92, used 1x
 - `G` = tile 23, used 14x
 - `H` = tile 93, used 1x
-- `I` = tile 15, used 19x
-- `J` = tile 10, used 126x
-- `K` = tile 31, used 19x
-- `L` = tile 75, used 138x
-- `M` = tile 11, used 1x
-- `N` = tile 12, used 1x
-- `O` = tile 78, used 1x
-- `P` = tile 26, used 12x
-- `Q` = tile 28, used 1x
-- `R` = tile 79, used 1x
+- `I` = tile 15, used 11x
+- `J` = tile 10, used 70x
+- `K` = tile 31, used 11x
+- `L` = tile 75, used 78x
+- `M` = tile 11, used 2x
+- `N` = tile 12, used 2x
+- `O` = tile 68, used 1x
+- `P` = tile 69, used 1x
+- `Q` = tile 78, used 1x
+- `R` = tile 26, used 8x
+- `S` = tile 28, used 2x
+- `T` = tile 74, used 2x
+- `U` = tile 79, used 1x
 
-![distinct tiles](img/B20_atlas.png)
+![distinct tiles](img/B22_atlas.png)
 
 ## Collision
 
@@ -161,18 +132,14 @@ Cell walkability reads the **bottom-left 8px tile** of each cell (`src/world/Map
     y5   SOLID  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID
     y6   SOLID  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID
     y7   SOLID  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID
-    y8   SOLID  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID
-    y9   SOLID  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID
-    y10  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID
-    y11  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID  SOLID
-    y12  SOLID  SOLID  DOOR   SOLID  SOLID  SOLID  SOLID  SOLID
+    y8   SOLID  SOLID  DOOR   SOLID  DOOR   SOLID  SOLID  SOLID
 ```
 
-Enterable cell: (3,12).
+Enterable cells: (3,8), (5,8).
 
 ## Silhouette
 
-514 of the 24576 px inside the box are ground outside the black outline, so the 128x192 box is **not** a solid rectangle - a pixel-perfect cutout has to follow the outline. Terrain pixels by tile row:
+386 of the 16384 px inside the box are ground outside the black outline, so the 128x128 box is **not** a solid rectangle - a pixel-perfect cutout has to follow the outline. Terrain pixels by tile row:
 
 ```
     r1   c1:25px, c16:25px
@@ -191,18 +158,11 @@ Enterable cell: (3,12).
     r14  c1:8px, c16:8px
     r15  c1:8px, c16:8px
     r16  c1:8px, c16:8px
-    r17  c1:8px, c16:8px
-    r18  c1:8px, c16:8px
-    r19  c1:8px, c16:8px
-    r20  c1:8px, c16:8px
-    r21  c1:8px, c16:8px
-    r22  c1:8px, c16:8px
-    r23  c1:8px, c16:8px
-    r24  c1:8px, c16:8px
 ```
 
 ## Where it stands
 
 | map | cell (x,y) | door | leads to |
 | --- | --- | --- | --- |
-| SAFFRON_CITY | (16,10) | (18,21) | `SILPH_CO_1F` |
+| CELADON_CITY | (6,6) | (8,13) | `CELADON_MART_1F` |
+| CELADON_CITY | (6,6) | (10,13) | `CELADON_MART_1F` |

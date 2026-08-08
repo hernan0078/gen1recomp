@@ -72,6 +72,14 @@ Voxel3D.FACE_SHADE = {
 local SHADER = [[
   varying float vShade;
   varying vec3 vSun;          // this fragment's place in the sun's view
+  varying float vFog;         // how deep into the map's haze it stands
+#ifdef VOXEL_CULL
+  // where this fragment stands in the FLAT world, for the diorama's
+  // viewport to measure. Same precision reasoning as vGrid below: a
+  // route's coordinates run to a few thousand and mediump has no
+  // fraction left out there, which would make the rim crawl.
+  varying LOVE_HIGHP_OR_MEDIUMP vec3 vWorld;
+#endif
 #ifdef VOXEL_GRID
   // model space, one unit per voxel -- see VoxelGrid. Precision matters
   // here in a way it does not for a colour: the seam is the FRACTIONAL
@@ -87,6 +95,7 @@ local SHADER = [[
   uniform vec3 eye;
   uniform float pull;
   uniform vec3 curve;         // xy = the focus in world XZ, z = k; 0 = off
+  uniform vec4 fogInfo;       // density, start, heightK; density 0 = clear
   attribute float VertexShade;
   vec4 position(mat4 transform_projection, vec4 vertex_position) {
     vShade = VertexShade;
@@ -108,6 +117,32 @@ local SHADER = [[
     // answered. (The pull below is excluded for the same reason: it is a
     // depth trick aimed at the camera's own buffer.)
     vSun = (sunVP * (sunModel * vertex_position)).xyz;
+    // THE MAP'S HAZE (see ForestAtmos): how much fog stands between the
+    // eye and this vertex -- distance dissolves into it, altitude climbs
+    // out of it. Worked out on the FLAT world like the shadow lookup
+    // above (the curve is a trick played on the viewer, not weather),
+    // and per VERTEX: on meshes built a face per voxel the interpolated
+    // answer is indistinguishable from per-fragment fog at a fraction of
+    // the cost.
+    vFog = 0.0;
+    if (fogInfo.x > 0.0) {
+      float fogRun = max(0.0, length(w.xyz - eye) - fogInfo.y);
+      vFog = (1.0 - exp(-fogInfo.x * fogRun))
+             * exp(-max(w.y, 0.0) * fogInfo.z);
+    }
+#ifdef VOXEL_CULL
+    // THE DIORAMA'S VIEWPORT (see lib/Diorama) is measured per FRAGMENT,
+    // so this stage's only job is to hand the position over -- and to hand
+    // over the FLAT one, like the fog and the shadow lookup above: the
+    // curve is a trick played on the viewer, and letting it drag geometry
+    // in and out of the viewport would make the rim breathe with the bend.
+    //
+    // Per fragment rather than per vertex because the diorama's own base
+    // is cut into cells far coarser than the rim is wide, and interpolating
+    // the rim across one of those spilled a whole cell of ground past the
+    // edge of a staged fight's disc.
+    vWorld = w.xyz;
+#endif
     // The curved world (see WorldCurve): drop every vertex by the square
     // of how far its column stands from the camera's focus. Applied AFTER
     // the shadow lookup above and clear of the wireframe's model space, so
@@ -132,6 +167,46 @@ local SHADER = [[
   }
 #endif
 #ifdef PIXEL
+#ifdef VOXEL_CULL
+  // The viewport, declared in THIS STAGE ALONE. A uniform declared in both
+  // defaults to highp in the vertex stage and mediump here, and GLSL ES
+  // refuses to link a uniform the two stages disagree about -- which is
+  // not a broken cut but no scene shader at all (lib/Water states the same
+  // trap at length for `vp`).
+  uniform vec3 cullAt;        // the viewport's centre, in world pixels
+  uniform vec3 cullShape;     // half-size, 1/fade, kind: 1 box, 2 ball,
+                              // 3 the staged fight's pillar
+  uniform vec2 cullRect;      // the BOX's half-extents in x and z, which
+                              // the round kinds have no use for. Two
+                              // numbers because the flat screen's box is
+                              // the WINDOW's own footprint and a window is
+                              // not square (lib/ViewBox); a headset's is,
+                              // and lib/Diorama sends the same half-size
+                              // twice.
+
+  // 1 well inside the viewport, 0 outside it, and the rim in between --
+  // which is a HARD edge for the box (its band is half a pixel wide, so
+  // the ramp is just the antialiasing) and a dissolve for the other two.
+  //
+  // Every kind is unbounded upward and downward on purpose: what is wanted
+  // is a rectangular (or round) piece cut OUT OF THE MAP, and a cut with a
+  // lid would take the tops off the trees standing in it.
+  float dioramaCull(vec3 p) {
+    if (cullShape.z <= 0.5) return 1.0;
+    vec3 cd = p - cullAt;
+    // how far INSIDE the cut this point is, in world pixels: the nearest
+    // side for the rectangle, the rim for the two round kinds
+    float inside;
+    if (cullShape.z < 1.5) {
+      inside = min(cullRect.x - abs(cd.x), cullRect.y - abs(cd.z));
+    } else if (cullShape.z < 2.5) {
+      inside = cullShape.x - length(cd);     // the ball, under V-CURVE
+    } else {
+      inside = cullShape.x - length(cd.xz);  // the fight's pillar
+    }
+    return clamp(inside * cullShape.y, 0.0, 1.0);
+  }
+#endif
   uniform Image sunMap;
   uniform float sunDark;      // how far into black a shadow goes; 0 = off
   uniform float sunBias;
@@ -205,6 +280,7 @@ local SHADER = [[
   uniform vec3 ghostColor;    // the flat silhouette colour
   uniform float ghost;        // 0 = shade normally, 1 = flatten to it
   uniform vec3 dayTint;       // the hour's light on the world; 1,1,1 = noon
+  uniform vec3 fogColor;      // what the haze is made of (see Voxel3D.fog)
   uniform Image glassMask;    // opaque where the atlas texel is window glass
   uniform vec2 glassSize;     // the mask's dimensions: tc -> atlas texels
   uniform float glassNight;   // 0 = daylight .. 1 = the lamps are on
@@ -218,6 +294,15 @@ local SHADER = [[
     // blending keeps those texels out of the depth buffer, so a model never
     // carves a transparent hole out of whatever stands behind it
     if (p.a < 0.5) discard;
+    // and the same for anything the diorama's viewport has faded out
+    // entirely: past the rim there is no world, and a fully faded fragment
+    // that still wrote depth would punch a hole in the sky behind it
+#ifdef VOXEL_CULL
+    float cull = dioramaCull(vWorld);
+    if (cull <= 0.0) discard;
+#else
+    float cull = 1.0;
+#endif
     // the hour's tint multiplies like the sun terms do: it is LIGHT, the
     // same warm or moonlit cast on every surface, not a palette swap
     vec3 rgb = p.rgb * vShade * sunlight(vSun) * dayTint;
@@ -256,6 +341,11 @@ local SHADER = [[
       vec3 lamp = vec3(1.0, 0.84, 0.5) * (0.5 + 0.55 * shine);
       rgb = mix(pane, lamp, glassNight * glass);
     }
+    // the haze stands between the eye and the SURFACE, so it lands after
+    // every surface term -- sun, seams, glass -- and before only the
+    // ghost, which must stay one solid readable shape whatever the
+    // weather (see below)
+    rgb = mix(rgb, fogColor, vFog);
     // The hidden player is a SHAPE, not a dimmed picture of itself. Tinting
     // through `color` could only multiply the sprite's own pixels, which
     // darkens each one by its own amount and keeps the character's internal
@@ -263,17 +353,33 @@ local SHADER = [[
     // solid silhouette. Last in the chain, so neither the sun nor a voxel
     // seam can mottle it.
     rgb = mix(rgb, ghostColor, ghost);
-    return vec4(rgb, 1.0) * color;
+    // the viewport's rim is an ALPHA, so the last of the model blends into
+    // whatever the frame opened with -- the sky, or the chroma key. 1
+    // everywhere without the cut compiled in, which is every flat frame.
+    return vec4(rgb, cull) * color;
   }
 #endif
 ]]
 
--- Two compilations of SHADER: the plain scene, and the same thing with the
--- voxel wireframe compiled in. The wireframe needs shader derivatives
--- (fwidth), the one piece of this a driver can refuse, so it is a separate
--- build rather than a branch -- a refusal costs the grid and nothing else.
+-- Compilations of SHADER, by what is compiled INTO it: the voxel
+-- wireframe, and the diorama's viewport. Variants rather than branches,
+-- for two different reasons.
+--
+-- The wireframe needs shader derivatives (fwidth), the one piece of this a
+-- driver can refuse, so a refusal has to cost the grid and nothing else.
+--
+-- The viewport carries a world-position varying, and a varying is paid for
+-- by every fragment of every frame whether or not anything reads it. The
+-- cut only ever exists inside a headset's diorama, so every other frame --
+-- the flat screen, and a phone above all -- compiles and binds exactly
+-- what it always did.
+--
 -- Each entry is nil = untried, false = unavailable.
-local shaders = { [false] = nil, [true] = nil }
+local shaders = {}
+
+local function shaderKey(grid, cull)
+  return (grid and "grid" or "plain") .. (cull and "+cull" or "")
+end
 local activeShader = nil      -- the variant this pass bound
 
 -- Scene canvases, one per NAMED SLOT. There are exactly two callers and
@@ -356,21 +462,24 @@ local function derivativesOK()
   return ok and caps and caps.shaderderivatives == true
 end
 
--- The scene shader. `grid` asks for the wireframe variant, and nil comes
--- back when that one will not build -- callers then fall back to the plain
--- one rather than losing the whole 3D pass.
-function Voxel3D.shader(grid)
-  grid = grid and true or false
-  if shaders[grid] == nil then
+-- The scene shader. `grid` asks for the wireframe variant and `cull` for
+-- the diorama's viewport; nil comes back when that combination will not
+-- build -- callers then fall back to a plainer one rather than losing the
+-- whole 3D pass.
+function Voxel3D.shader(grid, cull)
+  grid, cull = grid and true or false, cull and true or false
+  local key = shaderKey(grid, cull)
+  if shaders[key] == nil then
     if grid and not derivativesOK() then
-      shaders[grid] = false
+      shaders[key] = false
     else
-      local src = grid and ("#define VOXEL_GRID 1\n" .. SHADER) or SHADER
+      local src = (grid and "#define VOXEL_GRID 1\n" or "")
+                  .. (cull and "#define VOXEL_CULL 1\n" or "") .. SHADER
       local ok, sh = pcall(love.graphics.newShader, src)
-      shaders[grid] = ok and sh or false
+      shaders[key] = ok and sh or false
     end
   end
-  return shaders[grid] or nil
+  return shaders[key] or nil
 end
 
 -- Whether the 3D path can run at all. False on a headless test run (no
@@ -687,6 +796,30 @@ end
 -- answers it, so a caller that never does draws exactly what it always drew.
 Voxel3D.tint = { 1, 1, 1 }
 
+-- The map's haze, set the same way (VoxelScene and BattleScene ask
+-- ForestAtmos, who knows which maps have weather): a table of
+-- { color = {r,g,b}, density, start, heightK }, or nil for a clear day.
+-- nil -- the default -- sends density 0, so a caller that never heard of
+-- fog draws exactly what it always drew, and no pass can inherit the
+-- last one's weather.
+Voxel3D.fog = nil
+
+-- THE DIORAMA'S VIEWPORT, set the same way (VoxelScene asks lib/Diorama,
+-- who is told by lib/VR what the headset is doing): a table of
+-- { x, y, z, r, invFade, kind }, kind 1 for the ball and 2 for the staged
+-- fight's pillar. nil -- the default, and what every flat frame leaves it
+-- at -- sends kind 0, which is the shader's "draw the whole world".
+--
+-- A plain field rather than a require of lib/Diorama, and deliberately:
+-- this file is the bottom of the stack and everything else in the mode is
+-- built on it, so it learns about the diorama the same way it learns about
+-- the weather and the hour -- by being handed the answer.
+Voxel3D.cull = nil
+
+-- What the background is cleared to INSTEAD of the sky, or nil for the
+-- sky: DIORAMA-MR's chroma key, set for the eye passes alone.
+Voxel3D.keyColor = nil
+
 -- The window-glass pass, set the same way and for the same reason: the
 -- MASK belongs to the map's tileset (GlassMask.texture) and how lit the
 -- panes are belongs to the hour and to being outdoors at all
@@ -810,12 +943,20 @@ end
 -- `slot` names which cached canvas to render into (see `slots` above);
 -- omitted is the free-roam world pass.
 function Voxel3D.beginScene(w, h, cx, cy, vw, vh, sky, slot)
-  -- the wireframe variant when the player has it on AND it built; either
-  -- answer falls through to the plain scene rather than to no scene
+  -- the wireframe variant when the player has it on AND it built, and the
+  -- viewport variant while a diorama frame is open; either answer falls
+  -- through to a plainer scene rather than to no scene. The cut is dropped
+  -- LAST, because losing it draws a whole uncut world where a model should
+  -- be, which is worse than losing the seams.
   local grid = VoxelGrid.enabled()
-  local sh = grid and Voxel3D.shader(true) or nil
+  local cut = Voxel3D.cull ~= nil
+  local sh = grid and Voxel3D.shader(true, cut) or nil
   if not sh then
-    grid, sh = false, Voxel3D.shader()
+    grid = false
+    sh = Voxel3D.shader(false, cut)
+  end
+  if not sh and cut then
+    cut, sh = false, Voxel3D.shader(false, false)
   end
   if not sh then return false end
   local name = slot or "world"
@@ -864,10 +1005,18 @@ function Voxel3D.beginScene(w, h, cx, cy, vw, vh, sky, slot)
   -- pitch is the rung's -- the classic frame-hung painting stands.
   local skyRay = Voxel3D.skyRayLive
   local hy = Voxel3D.horizonY(h)
+  -- DIORAMA-MR: the background is a CHROMA KEY, so there is no sky at all
+  -- -- not a green one painted over, but no bands, no disc and no haze,
+  -- because every one of those is a colour a keyer would have to survive.
+  -- The world itself is untouched; only what is behind it changes.
+  local key = Voxel3D.keyColor
+  if key then sky = nil end
   -- where the sky's bottom edge lands, which is what the reflection
   -- reads its bands against (see Water). nil when nothing painted bands.
   Voxel3D.skyEdge = (sky and sky.bands) and Sky.region(h, hy) or nil
-  if sky then
+  if key then
+    love.graphics.clear(key[1], key[2], key[3], 1, true, true)
+  elseif sky then
     love.graphics.clear(sky[1], sky[2], sky[3], sky[4] or 1, true, true)
     -- The sky goes down here, in the one window in this function where a
     -- rectangle is just a rectangle: the depth mode and the scene shader are
@@ -922,6 +1071,22 @@ function Voxel3D.beginScene(w, h, cx, cy, vw, vh, sky, slot)
   pcall(sh.send, sh, "ghostColor", Voxel3D.GHOST_COLOR)
   -- the hour's light, as the caller last set it (see Voxel3D.tint)
   pcall(sh.send, sh, "dayTint", Voxel3D.tint or { 1, 1, 1 })
+  -- and the map's haze (see Voxel3D.fog), density 0 when there is none
+  local fog = Voxel3D.fog
+  pcall(sh.send, sh, "fogColor", (fog and fog.color) or { 0, 0, 0 })
+  pcall(sh.send, sh, "fogInfo", fog and
+        { fog.density or 0, fog.start or 0, fog.heightK or 0, 0 }
+        or { 0, 0, 0, 0 })
+  -- and the viewport (see Voxel3D.cull), kind 0 when there is none --
+  -- which is every frame that neither a headset's diorama (lib/Diorama)
+  -- nor an orbit rung's window box (lib/ViewBox) has cut
+  local cull = Voxel3D.cull
+  pcall(sh.send, sh, "cullAt",
+        cull and { cull.x, cull.y, cull.z } or { 0, 0, 0 })
+  pcall(sh.send, sh, "cullShape",
+        cull and { cull.r, cull.invFade, cull.kind } or { 0, 0, 0 })
+  pcall(sh.send, sh, "cullRect",
+        cull and { cull.rx or cull.r, cull.rz or cull.r } or { 0, 0 })
   -- the window glass: the tileset's mask (or the blank -- the sampler is
   -- declared either way, and unbound is a driver-dependent crash), how lit
   -- the panes are, and the movement-fed glint as the caller last set it
@@ -1127,6 +1292,25 @@ function Voxel3D.endWater()
   if activeShader then love.graphics.setShader(activeShader) end
 end
 
+-- A custom shader for the length of a draw, inside the pass. What makes
+-- this a pair rather than a bare setShader at the call site is the way
+-- BACK: the scene shader this pass bound is module-local (activeShader,
+-- above), so only this file can restore it -- the same restore endWater
+-- performs, without the canvas shuffle. Answers false when there is no
+-- pass to come back to, and the caller skips its draw entirely.
+function Voxel3D.beginEffect(shader)
+  if not (active and shader) then return false end
+  love.graphics.setShader(shader)
+  love.graphics.setColor(1, 1, 1, 1)
+  return true
+end
+
+function Voxel3D.endEffect()
+  if not active then return end
+  love.graphics.setColor(1, 1, 1, 1)
+  if activeShader then love.graphics.setShader(activeShader) end
+end
+
 -- Whether a reflective water pass can run in this frame at all -- there is
 -- a depth texture to read. Callers use it to choose between the water
 -- shader and an ordinary terrain draw before they start moving canvases.
@@ -1157,6 +1341,30 @@ function Voxel3D.seams(on)
   if not (active and activeShader) then return end
   pcall(activeShader.send, activeShader, "gridDark",
         on and VoxelGrid.DARK or 0)
+end
+
+-- ADDITIVE for the length of a draw, or nil to put the pass back the way
+-- it was found.
+--
+-- Exactly one thing asks for this: the flame and gas primitives on a
+-- STADIUM battle model (Charmander's tail, Weezing's cloud -- see
+-- StadiumRig). Those are light, not surface: they are drawn over a body
+-- that is already in the depth buffer and they must ADD to it rather than
+-- replace it, or the flame comes out as an opaque orange sticker.
+--
+-- Depth WRITES go off with the blend, and for the usual reason -- a
+-- translucent thing that wrote depth would punch whatever comes after it
+-- out of the frame. The test stays on, so a flame behind a tree is still
+-- behind the tree.
+function Voxel3D.blend(mode)
+  if not active then return end
+  if mode == "add" then
+    pcall(love.graphics.setBlendMode, "add", "alphamultiply")
+    pcall(love.graphics.setDepthMode, "lequal", false)
+  else
+    pcall(love.graphics.setBlendMode, "alpha", "alphamultiply")
+    pcall(love.graphics.setDepthMode, "lequal", true)
+  end
 end
 
 -- Whether what is drawn next may consult the glass mask. false for the

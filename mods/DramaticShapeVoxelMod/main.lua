@@ -85,11 +85,13 @@ local TiltShift = V.require("TiltShift")
 local ChunkMesher = V.require("ChunkMesher")
 local VoxelGrid = V.require("VoxelGrid")
 local WorldCurve = V.require("WorldCurve")
+local ViewBox = V.require("ViewBox")
 local OverworldBattle = V.require("OverworldBattle")
 local BattleExit = V.require("BattleExit")
 local DayNight = V.require("DayNight")
 local DayTint = V.require("DayTint")
 local Water = V.require("Water")
+local ForestAtmos = V.require("ForestAtmos")
 local AntiAlias = V.require("AntiAlias")
 local FirstPerson = V.require("FirstPerson")
 local Lang = V.require("Lang")
@@ -194,6 +196,9 @@ mod.content.render_pipelines:register("voxel", {
     -- battles and menus, and a CYCLE evening falls mid-fight exactly as it
     -- would mid-walk
     DayNight.update(dt)
+    -- the atmosphere's own clock (shaft shimmer, drifting motes), on the
+    -- same tick so the beams keep breathing through a dialog box
+    ForestAtmos.update(dt)
     -- The overworld battle rides this hook rather than owning a pipeline of
     -- its own, because it owns no pass of the FRAME: it draws under a battle
     -- screen the engine composites, which is not a stage the registry has.
@@ -203,6 +208,19 @@ mod.content.render_pipelines:register("voxel", {
     -- and the whole battle. Ahead of the active() gate below, because a 3D
     -- battle does not require the free-roam mode to be switched on.
     OverworldBattle.update(dt)
+    -- The one-time build of the Pokemon Stadium battle models out of the
+    -- player's own ROM, if there is one to build from and it has not been
+    -- done (see StadiumInstall). Rides this hook for the same reason the
+    -- battle does -- it is the tick that runs whatever is on the stack -- and
+    -- asks exactly once, on the first frame the player is actually in the
+    -- world, so it is never fighting the engine's own launcher for the
+    -- screen.
+    pcall(function() V.require("StadiumScreen").maybePush() end)
+    -- and a ROM the system file picker dropped in the save directory while
+    -- we were not the top activity (Android; see StadiumRomPick.poll)
+    pcall(function()
+      V.require("StadiumRomPick").poll(require("src.core.Game"))
+    end)
     -- The horde, on the same always-running tick and for the same reason:
     -- it owns no pass of the frame, it is a MODE over the overworld, and
     -- it has to keep thinking while a warp's wipe covers the screen (the
@@ -295,6 +313,7 @@ mod.content.render_pipelines:register("voxel", {
     OverworldBattle.invalidate()
     AntiAlias.invalidate()
     ChunkMesher.invalidate()   -- no map id = every cached mesh
+    ForestAtmos.invalidate()   -- shaft/particle meshes and shader sentinels
     VR.invalidate()            -- the mirror, and FBO ids of dead canvases
   end,
 })
@@ -361,6 +380,11 @@ applyFull = function(level)
   -- the horizon flat. The curve bends the world away from a walking player,
   -- which fights a fixed diorama framing
   WorldCurve.setting:setIndex(1, Game)
+  -- and the world cut to the window it is framed in (lib/ViewBox). FULL is
+  -- the model-on-a-table read and the sides are most of what makes it one:
+  -- a slab of Kanto with edges, rather than a map whose corners happen to
+  -- fall off the frame.
+  ViewBox.setting:setIndex(1, Game)
   -- and the water reflecting everything it can: FULL is the diorama at its
   -- most photographed, and a lake with the sky and the shoreline in it is
   -- most of what makes the model read as being outdoors
@@ -444,12 +468,44 @@ local SETTINGS = {
     when = function() return FirstPerson.engaged() end },
   { VoxelGrid.setting, "One-pixel wireframe along every voxel edge." },
   { WorldCurve.setting,
-    "Bend the world down over the horizon, Animal Crossing style." },
+    "Bend the world down over the horizon, Animal Crossing style. 1 is a "
+    .. "hint of roll at the frame edges and 2 is the classic read; 3 is as "
+    .. "far as it goes before the horizon closes over ground you can still "
+    .. "walk into. 4 and 5 are past that on purpose and they are for a "
+    .. "headset's DIORAMA, where the world is a model being looked at "
+    .. "rather than walked around in -- 5 curls it into a half sphere, a "
+    .. "town on top of its own little planet." },
+  { ViewBox.setting,
+    "How much of the map the camera bothers to draw. FIT is exactly the "
+    .. "ground on screen and no more -- the shape a tilted camera really "
+    .. "frames, which reaches well north of you and flares wide out there, "
+    .. "not the square the flat game shows. So a connected map that falls "
+    .. "entirely outside it is skipped before it is drawn, terrain, water, "
+    .. "grass and shadows together, which is most of the frame's geometry "
+    .. "at the high rungs. Below about 63 degrees that is all the row does "
+    .. "and the picture is untouched. At 75 the camera can see all the way "
+    .. "to the horizon, so something has to name a distance: FIT is the "
+    .. "closest, WIDE through WIDEST push the world's edge further out, "
+    .. "and OFF stops cutting entirely. Not on 1ST or 3RD -- you are "
+    .. "standing in the world there -- and the box opens out and away as "
+    .. "the camera dives in." },
   { Water.setting,
     "Reflections on water. FULL adds screen-space reflections of the "
     .. "shoreline, the trees and the buildings behind it; SKY is the sky, "
     .. "the sun and the moon alone, which is most of the look for a "
     .. "fraction of the cost." },
+  -- `full` for the AA reason: additive shafts are fill rate, and under 4X
+  -- supersampling that is a question about the hardware, not the look.
+  { ForestAtmos.setting,
+    "The air of the deep woods (Viridian Forest): a ground haze, and "
+    .. "volumetric light let down through the unseen canopy overhead -- "
+    .. "gold spears of sun by day, silver moon rays at night, pollen "
+    .. "drifting through the beams and fireflies once they cool. LOW "
+    .. "keeps the haze, halves the beam march and stands the particles "
+    .. "down. On a phone the row offers LOW alone: the beams need a "
+    .. "depth texture the pass can read back, and no mobile driver here "
+    .. "grants one.",
+    full = true },
   -- `full` marks a row FULL does not take away. FULL owns the diorama's own
   -- knobs; what a battle is drawn over, and how it is framed, are not that.
   -- Off the OPTIONS menu while VR is on: the headset REQUIRES staged
@@ -457,8 +513,18 @@ local SETTINGS = {
   -- and forbids back sprites (backPinned answers false), so both rows
   -- decide nothing there and a dead switch on the menu reads as broken.
   { OverworldBattle.setting,
-    "Fight on the map: the battle draws over the nearest clear ground, "
-    .. "shot over the shoulder with a slow parallax drift.",
+    "Fight in three dimensions, shot over the shoulder with a slow parallax "
+    .. "drift. 2D-3D stands the game's own battle pics up as cards; STADIUM "
+    .. "replaces them with the Pokemon Stadium battle models, animated, "
+    .. "playing the animation the move being used actually calls for. A "
+    .. "stages the fight on the MAP -- the nearest clear ground, in that "
+    .. "place's own weather and light; B stands it on two discs against the "
+    .. "sky instead, which works everywhere, including the caves and shop "
+    .. "floors that have nowhere to stage a fight. The STADIUM rungs only "
+    .. "appear once the models have been built, and building them needs a "
+    .. "Pokemon Stadium (US) 1.0 ROM of your own -- import it from the "
+    .. "STADIUM ROM row, or drop it in the baseroms folder and restart. No "
+    .. "other version works: the reader is keyed to that one cartridge.",
     when = function() return not VR.enabled() end, full = true },
   -- Only offered while a fight can actually be staged on the map: with 3D-BTL
   -- off the engine draws the classic screen, which is this row's ON already,
@@ -492,9 +558,18 @@ local SETTINGS = {
   -- `full` for the same reason as AA: not a knob on the look, a question
   -- about the hardware on the desk.
   { VR.setting,
-    "PCVR through OpenXR (SteamVR, Oculus, WMR). The diorama becomes a "
-    .. "tabletop model your head moves around; the 1ST rung stands you "
-    .. "inside the world at life size, looking where the headset looks. "
+    "PCVR through OpenXR (SteamVR, Oculus, WMR). STANDARD follows the VOXEL "
+    .. "ladder: the orbit rungs become a tabletop model your head moves "
+    .. "around, and the 1ST rung stands you inside the world at life size, "
+    .. "looking where the headset looks. DIORAMA is one presentation "
+    .. "instead -- the world always a model, cut to a square viewport you "
+    .. "grab with the grips to carry, turn and open out, with a "
+    .. "fight arriving as a floating disc of the map. There is no 2D and "
+    .. "no first person in it, and the left stick's click throws V-CURVE "
+    .. "to its top rung and back -- which turns the square cut into a ball "
+    .. "with a dissolved rim, because a bent world has no straight sides. "
+    .. "DIORAMA-MR is the same with the background keyed green, for a "
+    .. "mixed-reality capture. "
     .. "Menus and dialogs float on a panel. Needs a Windows OpenXR runtime "
     .. "and the mod running from a real folder; without them the row stays "
     .. "and the game stays flat, with the reason on the console.",
@@ -511,7 +586,10 @@ local SETTINGS = {
     .. "world past a head that did not move, which is the most reliable way "
     .. "to make somebody ill in a headset. Turn it on if you have your sea "
     .. "legs and want the continuity.",
-    when = function() return VR.enabled() end, full = true },
+    -- and only under STANDARD: the stick turns a HEAD, and neither diorama
+    -- mode has the player standing in the world to be turned
+    when = function() return VR.enabled() and not VR.dioramaMode() end,
+    full = true },
   -- Last on purpose: every assertion and every reader that indexes this
   -- table by position is describing the rows that were here before it.
   -- `full` on both of these: FULL is a preset for the LOOK, and it takes the
@@ -543,7 +621,7 @@ mod.options:define(schema)
 --   5  V-GRID   toggle the wireframe         (new)
 --   6  T-SHIFT  cycle the blur ladder        (was 9)
 --   7  V-CURVE  cycle the horizon bend       (new)
---   8  3D-BTL   toggle overworld battles     (new)
+--   8  3D-BTL   cycle overworld battles      (new)
 --   9  WATER    cycle the water reflections  (new; 9 was T-SHIFT's old key)
 --
 -- Only 6 arrives by the documented route. Game:keypressed answers the
@@ -608,10 +686,29 @@ local function cycleVoxel(game)
   return true
 end
 
+-- The same, to a NAMED rung rather than one step on: what a diorama mode
+-- holds the ladder with, since 2D and both free-roam rungs are things it
+-- cannot present (see VR.setVoxelLevel). Everything after the setLevel is
+-- the engine work above, for the same reasons.
+local function setVoxelLevel(game, level)
+  local Pipelines = require("src.render.Pipelines")
+  if Horde.viewLocked() then return false end
+  if Pipelines.level("voxel") == level then return false end
+  Pipelines.setLevel("voxel", level)
+  Pipelines.syncOptions(game.save.options)
+  game.save.options.tilt = 0
+  game.save.options.gbcfx = 0
+  require("src.render.GBCFX").setLevel(0)
+  require("src.render.Tilt").setLevel(game.save.options.tilt or 0)
+  game:writeOptions()
+  return true
+end
+
 -- The VR stick click makes this same step (VR.stepView): the function is
 -- a local of this file, so the handoff is explicit rather than a
 -- reimplementation drifting out of date in lib/VR.lua.
 VR.cycleVoxel = cycleVoxel
+VR.setVoxelLevel = setVoxelLevel
 
 do
   local Game = require("src.core.Game")
@@ -826,6 +923,18 @@ mod.hooks:wrap("ui.options.rows", function(next, game, rows)
                     and (not entry.when or entry.when())
     if offered then extra[#extra + 1] = entry[1]:row() end
   end
+  -- and the ROM import, which is an ACTION and not a setting: there is no
+  -- rung to store, nothing for the mod manager's page to persist and nothing
+  -- to restore on the next boot, so it is appended here rather than living in
+  -- SETTINGS.
+  -- On EVERY platform. Where there is no file dialog it says WHERE? and
+  -- shows the folder to put the cartridge in, which is the one thing a
+  -- player on a phone could not otherwise find out -- the row used to vanish
+  -- there, which reads as the feature being missing rather than manual.
+  local okPick, importRow = pcall(function()
+    return V.require("StadiumRomPick").row()
+  end)
+  if okPick and importRow then extra[#extra + 1] = importRow end
   local rows = insertGrouped(out, extra)
   -- Translate at DISPLAY time rather than by rewriting the label tables.
   --
@@ -838,8 +947,6 @@ mod.hooks:wrap("ui.options.rows", function(next, game, rows)
   -- EVERY row, not only this mod's. A player who picks Spanish is
   -- configuring an app, and an app that switches back to English halfway
   -- down its own settings list is worse than one that never offered Spanish.
-  -- ZOOM, VOID FILL, TEXT SPEED and the rest are the engine's, and they are
-  -- settings, so they translate.
   --
   -- Safe by construction: Lang.t only replaces strings it has a key for, so
   -- a row this mod has never heard of passes through untouched. Nothing that
@@ -953,6 +1060,9 @@ mod.events:on("map.reloaded", function(payload)
   if payload and payload.reason == "colors" then return end
   local mapId = payload and (payload.mapId or (payload.map and payload.map.id))
   if mapId then ChunkMesher.invalidate(mapId) end
+  -- the atmosphere's layout stands on the same carved stamps the meshes
+  -- do, so it goes stale on exactly the same event
+  if mapId then ForestAtmos.invalidate(mapId) end
 end)
 
 -- ------- rows come and go, so the menu has to notice

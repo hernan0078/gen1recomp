@@ -70,6 +70,22 @@ Lang.ES = {
   ["STEEP"]         = "EMPINADO",
   ["TABLE TOP"]     = "CENITAL",
   ["1ST PERSON"]    = "1A PERSONA",
+  ["3RD PERSON"]    = "3A PERSONA",
+
+  -- ------- what 1.7.x added
+  --
+  -- The STADIUM rungs and the ROM row keep their English names: STADIUM is
+  -- the cartridge's own title, and a player hunting for a Pokemon Stadium
+  -- ROM is looking for that word, not for a translation of it.
+  ["RENDER DIST"]   = "DISTANCIA",
+  ["STADIUM ROM"]   = "ROM STADIUM",
+  ["WIDER"]         = "MAS LEJOS",
+  ["WIDEST"]        = "MAXIMO",
+  ["LOW"]           = "BAJO",
+  ["STANDARD"]      = "ESTANDAR",
+  -- the two rungs the diorama added to the curve ladder
+  ["GLOBE"]         = "GLOBO",
+  ["PLANET"]        = "PLANETA",
 
   -- the language row's own values, which never translate
   ["ENGLISH"]       = "ENGLISH",

@@ -1,8 +1,8 @@
-# B17 - Unnamed building
+# B11 - Unnamed building
 
-![Unnamed building](img/B17_x6.png)
+![Unnamed building](img/B11_x6.png)
 
-`OVERWORLD` tileset, **6 x 2 cells** (12 x 4 tiles of 8px, 96 x 32 px). Appears **3 times** in the game. Tile ids index `assets/generated/tilesets/overworld.png`, 16 per row.
+`OVERWORLD` tileset, **6 x 2 cells** (12 x 4 tiles of 8px, 96 x 32 px). Appears **5 times** in the game. Tile ids index `assets/generated/tilesets/overworld.png`, 16 per row.
 
 Coordinates are 1-based and local to the building: cell x=1..6, y=1..2; tile column c=1..12, tile row r=1..4. No terrain padding is included - edge rows and columns that were pure ground have been trimmed.
 
@@ -14,8 +14,8 @@ Coordinates are 1-based and local to the building: cell x=1..6, y=1..2; tile col
    y1 | A B | C C | C C | C C | C C | D E |
       | F G | H H | H H | H H | H H | I J |
       +-----+-----+-----+-----+-----+-----+
-   y2 | K L | M N | O P | P O | P P | Q R |
-      | S T | * U | T T | T T | T T | T V |
+   y2 | K L | M N | O M | M O | M M | P Q |
+      | R S | S S | S S | S S | S S | S T |
       +-----+-----+-----+-----+-----+-----+
 ```
 
@@ -27,8 +27,8 @@ Coordinates are 1-based and local to the building: cell x=1..6, y=1..2; tile col
    y1 |   5   6 |   7   7 |   7   7 |   7   7 |   7   7 |   8   9 |
       |  21  22 |  23  23 |  23  23 |  23  23 |  23  23 |  24  25 |
       +---------+---------+---------+---------+---------+---------+
-   y2 |  37  38 |  11  12 |  35  10 |  10  35 |  10  10 |  40  41 |
-      |  78  26 |  27  28 |  26  26 |  26  26 |  26  26 |  26  79 |
+   y2 |  37  38 |  10  34 |  35  10 |  10  35 |  10  10 |  40  41 |
+      |  78  26 |  26  26 |  26  26 |  26  26 |  26  26 |  26  79 |
       +---------+---------+---------+---------+---------+---------+
 ```
 
@@ -38,8 +38,8 @@ As a 1-based Lua array, `rows[r][c]`:
 local rows = {
   {   5,   6,   7,   7,   7,   7,   7,   7,   7,   7,   8,   9 },  -- r1
   {  21,  22,  23,  23,  23,  23,  23,  23,  23,  23,  24,  25 },  -- r2
-  {  37,  38,  11,  12,  35,  10,  10,  35,  10,  10,  40,  41 },  -- r3
-  {  78,  26,  27,  28,  26,  26,  26,  26,  26,  26,  26,  79 },  -- r4
+  {  37,  38,  10,  34,  35,  10,  10,  35,  10,  10,  40,  41 },  -- r3
+  {  78,  26,  26,  26,  26,  26,  26,  26,  26,  26,  26,  79 },  -- r4
 }
 ```
 
@@ -47,7 +47,6 @@ local rows = {
 
 _Legend pending._
 
-- `*` = tile 27, used 1x
 - `A` = tile 5, used 1x
 - `B` = tile 6, used 1x
 - `C` = tile 7, used 8x
@@ -60,18 +59,16 @@ _Legend pending._
 - `J` = tile 25, used 1x
 - `K` = tile 37, used 1x
 - `L` = tile 38, used 1x
-- `M` = tile 11, used 1x
-- `N` = tile 12, used 1x
+- `M` = tile 10, used 5x
+- `N` = tile 34, used 1x
 - `O` = tile 35, used 2x
-- `P` = tile 10, used 4x
-- `Q` = tile 40, used 1x
-- `R` = tile 41, used 1x
-- `S` = tile 78, used 1x
-- `T` = tile 26, used 8x
-- `U` = tile 28, used 1x
-- `V` = tile 79, used 1x
+- `P` = tile 40, used 1x
+- `Q` = tile 41, used 1x
+- `R` = tile 78, used 1x
+- `S` = tile 26, used 10x
+- `T` = tile 79, used 1x
 
-![distinct tiles](img/B17_atlas.png)
+![distinct tiles](img/B11_atlas.png)
 
 ## Collision
 
@@ -79,10 +76,10 @@ Cell walkability reads the **bottom-left 8px tile** of each cell (`src/world/Map
 
 ```
     y1   SOLID  SOLID  SOLID  SOLID  SOLID  SOLID
-    y2   SOLID  DOOR   SOLID  SOLID  SOLID  SOLID
+    y2   SOLID  SOLID  SOLID  SOLID  SOLID  SOLID
 ```
 
-Enterable cell: (2,2).
+Every cell is solid - this building has no door of its own.
 
 ## Silhouette
 
@@ -98,6 +95,8 @@ Enterable cell: (2,2).
 
 | map | cell (x,y) | door | leads to |
 | --- | --- | --- | --- |
-| CERULEAN_CITY | (8,10) | (9,11) | `CERULEAN_BADGE_HOUSE` |
-| CERULEAN_CITY | (26,10) | (27,11) | `CERULEAN_TRASHED_HOUSE` |
-| CERULEAN_CITY | (12,14) | (13,15) | `CERULEAN_TRADE_HOUSE` |
+| CELADON_CITY | (20,14) | - | scenery, no entrance |
+| CERULEAN_CITY | (14,10) | - | scenery, no entrance |
+| CERULEAN_CITY | (34,10) | - | scenery, no entrance |
+| CERULEAN_CITY | (18,24) | - | scenery, no entrance |
+| CERULEAN_CITY | (28,24) | - | scenery, no entrance |

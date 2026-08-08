@@ -1,8 +1,8 @@
-# B05 - Unnamed building
+# B03 - Unnamed building
 
-![Unnamed building](img/B05_x10.png)
+![Unnamed building](img/B03_x10.png)
 
-`OVERWORLD` tileset, **4 x 4 cells** (8 x 8 tiles of 8px, 64 x 64 px). Appears **11 times** in the game. Tile ids index `assets/generated/tilesets/overworld.png`, 16 per row.
+`OVERWORLD` tileset, **4 x 4 cells** (8 x 8 tiles of 8px, 64 x 64 px). Appears **15 times** in the game. Tile ids index `assets/generated/tilesets/overworld.png`, 16 per row.
 
 Coordinates are 1-based and local to the building: cell x=1..4, y=1..4; tile column c=1..8, tile row r=1..8. No terrain padding is included - edge rows and columns that were pure ground have been trimmed.
 
@@ -20,8 +20,8 @@ Coordinates are 1-based and local to the building: cell x=1..4, y=1..4; tile col
    y3 | I J | J J | J J | J K |
       | I L | L L | L L | L K |
       +-----+-----+-----+-----+
-   y4 | I L | M N | O P | L K |
-      | Q R | * S | T T | R U |
+   y4 | I L | M N | L L | L K |
+      | O P | * Q | P P | P R |
       +-----+-----+-----+-----+
 ```
 
@@ -39,8 +39,8 @@ Coordinates are 1-based and local to the building: cell x=1..4, y=1..4; tile col
    y3 |  15  10 |  10  10 |  10  10 |  10  31 |
       |  15  75 |  75  75 |  75  75 |  75  31 |
       +---------+---------+---------+---------+
-   y4 |  15  75 |  11  12 |  66  67 |  75  31 |
-      |  78  26 |  27  28 |  74  74 |  26  79 |
+   y4 |  15  75 |  11  12 |  75  75 |  75  31 |
+      |  78  26 |  27  28 |  26  26 |  26  79 |
       +---------+---------+---------+---------+
 ```
 
@@ -54,8 +54,8 @@ local rows = {
   {  92,  23,  23,  23,  23,  23,  23,  93 },  -- r4
   {  15,  10,  10,  10,  10,  10,  10,  31 },  -- r5
   {  15,  75,  75,  75,  75,  75,  75,  31 },  -- r6
-  {  15,  75,  11,  12,  66,  67,  75,  31 },  -- r7
-  {  78,  26,  27,  28,  74,  74,  26,  79 },  -- r8
+  {  15,  75,  11,  12,  75,  75,  75,  31 },  -- r7
+  {  78,  26,  27,  28,  26,  26,  26,  79 },  -- r8
 }
 ```
 
@@ -75,18 +75,15 @@ _Legend pending._
 - `I` = tile 15, used 3x
 - `J` = tile 10, used 6x
 - `K` = tile 31, used 3x
-- `L` = tile 75, used 8x
+- `L` = tile 75, used 10x
 - `M` = tile 11, used 1x
 - `N` = tile 12, used 1x
-- `O` = tile 66, used 1x
-- `P` = tile 67, used 1x
-- `Q` = tile 78, used 1x
-- `R` = tile 26, used 2x
-- `S` = tile 28, used 1x
-- `T` = tile 74, used 2x
-- `U` = tile 79, used 1x
+- `O` = tile 78, used 1x
+- `P` = tile 26, used 4x
+- `Q` = tile 28, used 1x
+- `R` = tile 79, used 1x
 
-![distinct tiles](img/B05_atlas.png)
+![distinct tiles](img/B03_atlas.png)
 
 ## Collision
 
@@ -120,14 +117,18 @@ Enterable cell: (2,4).
 
 | map | cell (x,y) | door | leads to |
 | --- | --- | --- | --- |
-| CELADON_CITY | (40,6) | (41,9) | `CELADON_POKECENTER` |
-| CERULEAN_CITY | (18,14) | (19,17) | `CERULEAN_POKECENTER` |
-| CINNABAR_ISLAND | (10,8) | (11,11) | `CINNABAR_POKECENTER` |
-| FUCHSIA_CITY | (18,24) | (19,27) | `FUCHSIA_POKECENTER` |
-| LAVENDER_TOWN | (2,2) | (3,5) | `LAVENDER_POKECENTER` |
-| PEWTER_CITY | (12,22) | (13,25) | `PEWTER_POKECENTER` |
-| ROUTE_10 | (10,16) | (11,19) | `ROCK_TUNNEL_POKECENTER` |
-| ROUTE_4 | (10,2) | (11,5) | `MT_MOON_POKECENTER` |
-| SAFFRON_CITY | (8,26) | (9,29) | `SAFFRON_POKECENTER` |
-| VERMILION_CITY | (10,0) | (11,3) | `VERMILION_POKECENTER` |
-| VIRIDIAN_CITY | (22,22) | (23,25) | `VIRIDIAN_POKECENTER` |
+| CELADON_CITY | (32,16) | (33,19) | `GAME_CORNER_PRIZE_ROOM` |
+| CELADON_CITY | (30,24) | (31,27) | `CELADON_DINER` |
+| CELADON_CITY | (34,24) | (35,27) | `CELADON_CHIEF_HOUSE` |
+| CELADON_CITY | (42,24) | (43,27) | `CELADON_HOTEL` |
+| CERULEAN_CITY | (12,22) | (13,25) | `BIKE_SHOP` |
+| ROUTE_2 | (2,12) | - | scenery, no entrance |
+| ROUTE_2 | (2,40) | (3,43) | `VIRIDIAN_FOREST_SOUTH_GATE` |
+| ROUTE_5 | (16,24) | (17,27) | `UNDERGROUND_PATH_ROUTE_5` |
+| ROUTE_6 | (16,10) | (17,13) | `UNDERGROUND_PATH_ROUTE_6` |
+| ROUTE_7 | (4,10) | (5,13) | `UNDERGROUND_PATH_ROUTE_7` |
+| SAFFRON_CITY | (28,26) | (29,29) | `MR_PSYCHICS_HOUSE` |
+| VERMILION_CITY | (6,0) | (7,3) | `VERMILION_OLD_ROD_HOUSE` |
+| VERMILION_CITY | (8,10) | (9,13) | `POKEMON_FAN_CLUB` |
+| VERMILION_CITY | (14,10) | (15,13) | `VERMILION_TRADE_HOUSE` |
+| VERMILION_CITY | (22,16) | (23,19) | `VERMILION_PIDGEY_HOUSE` |

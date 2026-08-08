@@ -463,6 +463,28 @@ uniform float pxAngle;       // radians of view one screen pixel subtends
 // sample to get back to the screen. Declared in both stages, like `vp`, and
 // both are highp here.
 uniform vec3 curve;          // xy = the focus in world XZ, z = k; 0 = off
+// The viewport, exactly as the scene shader takes it: centre in world
+// pixels, then half-size / one-over-fade / kind (0 off, 1 box, 2 ball, 3
+// the staged fight's pillar), plus the box's two half-extents. Water is
+// world like anything else, and a lake left lying outside the model would
+// be the one thing floating in the sky.
+uniform vec3 cullAt;
+uniform vec3 cullShape;
+uniform vec2 cullRect;
+
+float dioramaCull(vec3 p) {
+  if (cullShape.z <= 0.5) return 1.0;
+  vec3 cd = p - cullAt;
+  float inside;
+  if (cullShape.z < 1.5) {
+    inside = min(cullRect.x - abs(cd.x), cullRect.y - abs(cd.z));
+  } else if (cullShape.z < 2.5) {
+    inside = cullShape.x - length(cd);
+  } else {
+    inside = cullShape.x - length(cd.xz);
+  }
+  return clamp(inside * cullShape.y, 0.0, 1.0);
+}
 
 // How far the bend has pushed the world down at world XZ `q` -- the vertex
 // stage's own displacement, as a number this stage can add and subtract.
@@ -940,7 +962,16 @@ vec2 waveUV(vec2 tc, vec2 col) {
 // can afford it -- the colour is a colour, and tc/sc arrived through
 // LOVE's mediump plumbing whatever this signature says -- and the maths
 // below runs on the stage default the moment the values touch a local.
-vec4 effect(mediump vec4 color, Image tex, mediump vec2 tc, mediump vec2 sc) {
+//
+// Which precision that has to BE is not ours to know: LOVE 12 forward-
+// declares effect() under a different one, and pins that matched 11's
+// prototype are the mismatch there -- the same refusal, from the other
+// side, with the water falling back to flat. So the qualifier is a define
+// the Lua side fills in, and Water.shader compiles the pinned form first
+// and the bare one only if that is refused. Whichever prototype a runtime
+// brought, one of the two agrees with it.
+vec4 effect(EFFECT_PREC vec4 color, Image tex, EFFECT_PREC vec2 tc,
+            EFFECT_PREC vec2 sc) {
   // THE DEPTH TEST, done here because the buffer that would have done it is
   // detached for the length of this pass so it can be READ (see the header).
   // Same comparison, same buffer, same result: a building in front of a pond
@@ -1080,7 +1111,14 @@ vec4 effect(mediump vec4 color, Image tex, mediump vec2 tc, mediump vec2 sc) {
 #ifdef VOXEL_GRID
   rgb *= 1.0 - gridDark * columnSeam(hit, sheet, axis);
 #endif
-  return vec4(rgb, 1.0) * color;
+  // and the diorama's rim, over the finished surface. Per FRAGMENT here,
+  // where the scene shader answers per vertex: this stage already carries
+  // the world position it marched with, so the exact answer is free --
+  // and measured on the FLAT world, which is what bendDrop puts back.
+  float cull = dioramaCull(vec3(vBent.x, vBent.y + bendDrop(vBent.xz),
+                                vBent.z));
+  if (cull <= 0.0) discard;
+  return vec4(rgb, cull) * color;
 }
 #endif
 ]]
@@ -1133,7 +1171,7 @@ end
 
 Water._trainSource = trainSource       -- named for the suite
 
-local function source(grid)
+local function source(grid, bare)
   local src = SHADER_SRC:gsub("//@CRATERS", (craterSource():gsub("%%", "%%%%")))
   src = src:gsub("//@TRAINS", (trainSource():gsub("%%", "%%%%")))
   local head = ("#define RAY_STEPS %d\n#define RAY_REFINE %d\n"
@@ -1141,6 +1179,12 @@ local function source(grid)
     :format(Water.RAY_STEPS, Water.RAY_REFINE, Water.WAVE_STEPS,
             Water.WAVE_STRIDE)
   if grid then head = head .. "#define VOXEL_GRID 1\n" end
+  -- effect()'s parameter precision -- see the signature for why it cannot
+  -- simply be spelled there. Empty is a define all the same: the params
+  -- then carry the stage default, which is what a prototype declared
+  -- without qualifiers wants.
+  head = head .. (bare and "#define EFFECT_PREC\n"
+                        or "#define EFFECT_PREC mediump\n")
   return head .. src
 end
 
@@ -1159,6 +1203,13 @@ function Water.shader(grid)
       shaders[grid] = false
     else
       local ok, sh = pcall(love.graphics.newShader, source(grid))
+      if not ok then
+        -- the pinned prototype was the wrong one for this runtime; the bare
+        -- one is the only other shape there is, and a driver that refuses
+        -- both was never going to draw this water anyway
+        local bareOk, bareSh = pcall(love.graphics.newShader, source(grid, true))
+        if bareOk then ok, sh = bareOk, bareSh end
+      end
       if not ok and V and V.mod and V.mod.log then
         -- once, where it can be read: the fallback is flat water, which is
         -- easy to look at and impossible to diagnose without this line
@@ -1224,6 +1275,15 @@ function Water.begin(ctx)
   send("vp", "row", ctx.vp)
   send("eye", ctx.eye)
   send("curve", ctx.curve)
+  -- the viewport, as beginScene sent it to the scene shader; kind 0 --
+  -- every frame neither the diorama nor the orbit's box has cut -- is
+  -- "no cut"
+  local cull = V.require("Voxel3D").cull
+  send("cullAt", cull and { cull.x, cull.y, cull.z } or { 0, 0, 0 })
+  send("cullShape", cull and { cull.r, cull.invFade, cull.kind }
+                    or { 0, 0, 0 })
+  send("cullRect", cull and { cull.rx or cull.r, cull.rz or cull.r }
+                   or { 0, 0 })
   send("screen", { ctx.screen[1], ctx.screen[2] })
   send("cell", math.max(1, ctx.cell or 1))
   -- how much of the view one screen pixel is worth: what sets the relief
